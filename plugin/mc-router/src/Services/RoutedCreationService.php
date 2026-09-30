@@ -18,8 +18,8 @@ final class RoutedCreationService extends ServerCreationService
     public function handle(array $data, ?DeploymentObject $deployment = null): Server
     {
         $enabled = (bool) ($data['mc_router_enabled'] ?? false);
-        $eggs = app(Settings::class)->get()['eggs'] ?? [];
-        if ($enabled && $eggs && !in_array((int) ($data['egg_id'] ?? 0), array_map('intval', $eggs), true)) {
+        $eggId = (int) ($data['egg_id'] ?? 0);
+        if ($enabled && !\Kynzo\McRouter\Filament\RoutingFields::eggEligible($eggId)) {
             // Step is hidden for this egg; do not route silently from stale toggle state.
             $enabled = false;
         }

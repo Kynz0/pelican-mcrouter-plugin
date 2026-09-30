@@ -64,9 +64,9 @@ final class SettingsForm
                     ->options(fn (Get $get) => Allocation::where('node_id', $get('node_id'))->orderBy('port')->get()
                         ->mapWithKeys(fn ($a) => [$a->id => $a->ip . ':' . $a->port . ($a->server_id ? ' (assigned)' : '')])),
             ])->helperText('Explicit allocations, including occupied ones that may become available later. Extra mod/voice ports should not be included.'),
-            Select::make('eggs')->label('Offer routing for these eggs only')->multiple()->searchable()
+            Select::make('eggs')->label('Eggs with MC Router')->multiple()->searchable()
                 ->options(fn () => \App\Models\Egg::orderBy('name')->pluck('name', 'id'))
-                ->helperText('Leave empty to offer MC Router for every egg. The creation step only appears after one of these eggs is selected.'),
+                ->helperText('Saving automatically adds or removes the "' . \Kynzo\McRouter\Filament\RoutingFields::EGG_FEATURE . '" egg feature to match this list — eggs with that feature get the creation step and the edit tab (you can also set the feature manually in the egg editor). Leave empty to offer MC Router for every egg; the feature is then removed from all eggs because eligibility no longer depends on it.'),
             TextInput::make('local_port')->label('Local test API port')->numeric()->minValue(1)->maxValue(65535)
                 ->visible(fn (Get $get) => $get('mode') === 'local'),
             TextInput::make('ssh_host')->label('SSH host')->visible(fn (Get $get) => $get('mode') === 'ssh'),

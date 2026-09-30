@@ -19,6 +19,8 @@
 - [x] Replace optional-override terminology with a populated Primary allocation selector.
 - [x] Replace blanket permission toggle with exact-change confirmation modals.
 - [x] Native plugin settings UI with visible validation before beta38's swallowed save callback.
+- [x] No extra save button: routing applies with the page's Save changes via a pinned Livewire call hook.
+- [x] Egg feature flag ("mc-router") synced from settings; eligibility via feature, edit tab gated per egg.
 - [x] Display alias: show the join hostname wherever the panel renders the primary allocation address (applied on Active in live mode, cleared on removal, custom aliases preserved, never in dry-run).
 - [x] Egg gating: settings list of eligible eggs; the step only appears after one is selected (native hooks cannot place it between Egg Configuration and Environment Configuration; it renders as the final step).
 - [x] UUID ownership ledger, normalized unique hostname reservations and deletion tombstones.
@@ -34,7 +36,8 @@
 
 ## Before production / stable v1
 
-- [ ] Add remaining Tabler icons for closer panel look & feel (creation step badge, action buttons, settings fields, allocation select icons, notification icons).
+- [ ] Add remaining Tabler icons for closer panel look & feel (creation step badge, some action buttons, settings fields, notification icons).
+- [ ] Offer upstream PR for true mid-wizard step insertion (between Egg Configuration and Environment Configuration).
 - [ ] Review whether trusted Panel-wide API access via SSH is acceptable (no native namespace authorization).
 - [ ] Task-scoped authorization for a live install and any SSH/systemd/permission/DNS/NAT changes.
 - [ ] Validate live router restart durability, writable config/sandbox, backups and restore procedure.

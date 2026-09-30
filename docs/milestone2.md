@@ -16,11 +16,19 @@ mc-router v1.47.1. It is not approved for production installation.
 - Existing eligible primaries are retained. An ineligible primary has an
   **Automatically select eligible replacement** action with a specific modal.
   A manual replacement likewise needs confirmation for that exact allocation.
-  **Save MC Router settings** saves routing separately from the core server Save.
+  Routing settings are applied by the page's own **Save changes** button through
+  a pinned Livewire call hook (a standalone save button is deliberately absent).
 - Admin → Plugins → MC Router → Settings provides suffix, explicit allocation
-  pools per node, and transport configuration. Settings validation runs in the
-  schema as well as the service because beta38's Plugin model catches exceptions
-  from the save callback. Invalid settings remain visible instead of disappearing.
+  pools per node, eligible eggs, and transport configuration. Settings validation
+  runs in the schema as well as the service because beta38's Plugin model catches
+  exceptions from the save callback. Invalid settings remain visible instead of
+  disappearing.
+- Egg gating via the **"mc-router" egg feature**: the settings list
+  "Eggs with MC Router" is synced to that feature on save (clearly labeled);
+  eggs carrying the feature get the creation step and the edit tab, and admins
+  can grant/revoke eligibility manually in the egg editor. Empty list = routing
+  offered for every egg (feature removed everywhere). The edit tab stays
+  available for servers that already route even if their egg loses eligibility.
 - Dry-run is the default. It persists plugin choices/hostname reservations but
   never changes existing primaries or writes router routes. A proposed port is
   not reserved; availability is rechecked on a real save.
@@ -91,8 +99,9 @@ nix develop -c python3 tests/ssh_driver.py
 - 42 pure hostname/allocation/ownership checks and 11 HTTP framing checks.
 - Actual native Livewire wizard/tab state, populated primary selection, core
   selector mirroring, toggle-off restoration, specific confirmation dialogs,
-  edit-tab save, settings slide-over save/validation, egg-gated step visibility
-  and non-admin rejection.
+  edit-tab save through the page Save hook, settings slide-over save/validation,
+  egg-feature sync/add/remove, egg-gated step and tab visibility and non-admin
+  rejection.
 - 26 checks using real Panel creation/build services with mocked Wings: disabled
   flow, successful capture, duplicate rollback, network-boundary transaction
   depth, failed Wings cleanup/slug reuse and confirmed primary replacement.

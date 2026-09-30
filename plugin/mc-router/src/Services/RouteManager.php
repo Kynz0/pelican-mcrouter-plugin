@@ -16,6 +16,14 @@ use Kynzo\McRouter\Models\RouteRecord;
 
 final class RouteManager
 {
+    /** Apply the edit-tab form state; runs after the page's own "Save changes" succeeds. */
+    public function saveFromForm(Server $server, array $data): void
+    {
+        if (!array_key_exists('mc_router_enabled', $data)) { return; } // Tab hidden (e.g. egg not eligible): leave routing untouched.
+        $this->save($server, (bool) ($data['mc_router_enabled'] ?? false), (string) ($data['mc_router_slug'] ?? ''),
+            (int) ($data['mc_router_allocation_id'] ?? 0), (int) ($data['mc_router_confirmed_allocation'] ?? 0));
+    }
+
     public function hostname(string $slug): string
     {
         try { return Hostname::make($slug, app(Settings::class)->get()['suffix'], config('mc-router.reserved', [])); }

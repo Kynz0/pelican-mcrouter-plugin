@@ -9,6 +9,7 @@ use App\Enums\TablerIcon;
 use App\Enums\TabPosition;
 use App\Filament\Admin\Resources\Servers\Pages\CreateServer;
 use App\Filament\Admin\Resources\Servers\Pages\EditServer;
+use App\Models\Server;
 use Filament\Contracts\Plugin;
 use Filament\Notifications\Notification;
 use Filament\Panel;
@@ -16,6 +17,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Illuminate\Validation\ValidationException;
 use Kynzo\McRouter\Filament\RoutingFields;
 use Kynzo\McRouter\Filament\SettingsForm;
+use Kynzo\McRouter\Services\EggFeatureSync;
 use Kynzo\McRouter\Services\Settings;
 
 final class McRouterPlugin implements Plugin, HasPluginSettings
@@ -32,17 +34,18 @@ final class McRouterPlugin implements Plugin, HasPluginSettings
                 ->label('MC Router')->icon(TablerIcon::Router)->completedIcon(TablerIcon::Check)
                 ->visible(function (Get $get) {
                     if (!(user()?->isRootAdmin() ?? false)) { return false; }
-                    $eggs = array_map('intval', app(Settings::class)->get()['eggs'] ?? []);
-                    if (!$eggs) { return true; }
-                    $eggId = (int) $get('egg_id');
 
-                    return $eggId !== 0 && in_array($eggId, $eggs, true);
+                    return RoutingFields::eggEligible((int) $get('egg_id'));
                 })
                 ->schema(fn () => RoutingFields::fields(true)));
         EditServer::registerCustomTabs(TabPosition::After,
             \Kynzo\McRouter\Filament\RoutingTab::make('mc-router')->label('MC Router')
                 ->icon(TablerIcon::Router)
-                ->visible(fn () => user()?->isRootAdmin() ?? false)
+                ->visible(function (Get $get, ?Server $record) {
+                    if (!(user()?->isRootAdmin() ?? false) || !$record) { return false; }
+                    // Servers that already route stay manageable even if their egg is no longer eligible.
+                    return RoutingFields::eggEligible($record->egg_id) || RoutingFields::record($record) !== null;
+                })
                 ->columns(['default' => 1, 'sm' => 2])
                 ->schema(fn () => RoutingFields::fields(false)));
     }
@@ -72,6 +75,7 @@ final class McRouterPlugin implements Plugin, HasPluginSettings
         $data = SettingsForm::values($data);
         try { app(Settings::class)->save($data); }
         catch (\InvalidArgumentException $e) { throw ValidationException::withMessages(['suffix' => $e->getMessage()]); }
+        app(EggFeatureSync::class)->sync($data['eggs'] ?? []);
         Notification::make()->title('MC Router settings saved')->success()->send();
     }
 }

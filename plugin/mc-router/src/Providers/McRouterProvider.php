@@ -9,6 +9,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\ServiceProvider;
 use Kynzo\McRouter\Models\RouteRecord;
 use Kynzo\McRouter\Services\CreationCapture;
+use Kynzo\McRouter\Services\RouteManager;
 use Kynzo\McRouter\Services\RoutedCreationService;
 
 final class McRouterProvider extends ServiceProvider
@@ -52,6 +53,15 @@ final class McRouterProvider extends ServiceProvider
                     }
                 };
             }
+        });
+        // Pinned Livewire call hook: run routing saves after the page's own "Save changes" succeeds.
+        \Livewire\Livewire::listen('call', function ($component, $method) {
+            if ($method !== 'save' || !($component instanceof \App\Filament\Admin\Resources\Servers\Pages\EditServer)) { return null; }
+
+            return function ($return) use ($component) {
+                app(RouteManager::class)->saveFromForm($component->record, $component->data ?? []);
+                return $return;
+            };
         });
         Server::creating(fn (Server $server) => $this->app->make(CreationCapture::class)->creating($server));
         Server::created(fn (Server $server) => $this->app->make(CreationCapture::class)->created($server));

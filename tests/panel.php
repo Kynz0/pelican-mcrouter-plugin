@@ -62,8 +62,9 @@ try {
         throw new RuntimeException('Missing schema action: ' . $name);
     };
     $edit->callAction($schemaAction($edit, 'mc_router_confirm_change'))
-        ->assertSet('data.mc_router_confirmed_allocation', $free->id)
-        ->callAction($schemaAction($edit, 'mc_router_save'));
+        ->assertSet('data.mc_router_confirmed_allocation', $free->id);
+    // Routing is applied by the page's own "Save changes" button through the pinned call hook.
+    $edit->call('save');
     $savedStatus = Kynzo\McRouter\Models\RouteRecord::where('server_uuid', $server->uuid)->value('status');
     if ($savedStatus !== 'dry-run') {
         throw new RuntimeException('The actual edit-tab save action did not persist dry-run settings (status: ' . var_export($savedStatus, true) . ').');
@@ -95,9 +96,13 @@ try {
     $mcEgg = App\Models\Egg::factory()->create(['name' => 'Fabric']);
     $otherEgg = App\Models\Egg::factory()->create(['name' => 'Rust']);
     $values = app(Kynzo\McRouter\Services\Settings::class)->get();
-    $values['eggs'] = [$mcEgg->id];
-    app(Kynzo\McRouter\Services\Settings::class)->save($values);
-    // The step label only appears in the stepper once a gated egg is selected.
+    $plugin->saveSettings([...$values, 'eggs' => [$mcEgg->id],
+        'pool_rows' => collect($values['pools'])->map(fn ($ids, $nodeId) => ['node_id' => (int) $nodeId, 'allocation_ids' => $ids])->values()->all()]);
+    unset($values['pools']);
+    if (!in_array(Kynzo\McRouter\Filament\RoutingFields::EGG_FEATURE, $mcEgg->refresh()->features ?? [], true)) {
+        throw new RuntimeException('Saving settings did not apply the mc-router egg feature.');
+    }
+    // The step label only appears in the stepper once a feature-gated egg is selected.
     Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\CreateServer::class)
         ->assertDontSee('MC Router')
         ->set('data.egg_id', $otherEgg->id)->assertDontSee('MC Router')
@@ -109,6 +114,19 @@ try {
         throw new RuntimeException('Gated creation unexpectedly completed.');
     } catch (Illuminate\Database\Eloquent\ModelNotFoundException) {
         if (Kynzo\McRouter\Models\RouteRecord::where('hostname', 'like', 'gated%')->exists()) { throw new RuntimeException('Gated egg was routed anyway.'); }
+    }
+    // The edit tab is egg-gated too, but stays available for servers that already route.
+    Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\EditServer::class, ['record' => $legacyServer->id])
+        ->assertDontSee('Use mc-router');
+    $mcServer = App\Models\Server::factory()->create(['owner_id' => $admin->id, 'node_id' => $node->id, 'allocation_id' => $free->id, 'egg_id' => $mcEgg->id]);
+    $free->update(['server_id' => $mcServer->id]);
+    Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\EditServer::class, ['record' => $mcServer->id])
+        ->assertSee('Use mc-router');
+    $fresh = app(Kynzo\McRouter\Services\Settings::class)->get();
+    $plugin->saveSettings([...$fresh, 'eggs' => [],
+        'pool_rows' => collect($fresh['pools'])->map(fn ($ids, $nodeId) => ['node_id' => (int) $nodeId, 'allocation_ids' => $ids])->values()->all()]);
+    if (in_array(Kynzo\McRouter\Filament\RoutingFields::EGG_FEATURE, $mcEgg->refresh()->features ?? [], true)) {
+        throw new RuntimeException('Empty egg list did not remove the mc-router feature.');
     }
     $ordinary = App\Models\User::factory()->create();
     Illuminate\Support\Facades\Auth::login($ordinary);
@@ -122,5 +140,10 @@ try {
     echo "OK: native creation step/edit tab, actual populated primary selector, slug hydration, specific confirmation, read-only unsaved fields, persisted settings, egg-gated step visibility, gated-egg creation bypass, non-admin denial\n";
 } catch (PHPUnit\Framework\ExpectationFailedException $e) {
     echo $e->getComparisonFailure()?->getDiff();
+    throw $e;
+} catch (Throwable $e) {
+    if (str_contains($e->getMessage(), 'Configuration') || get_class($e) === 'PHPUnit\Event\RuntimeException') {
+        foreach (array_slice($e->getTrace(), 0, 12) as $f) { echo ($f['class'] ?? '') . ($f['type'] ?? '') . ($f['function'] ?? '') . ' @ ' . basename($f['file'] ?? '') . ':' . ($f['line'] ?? '') . PHP_EOL; }
+    }
     throw $e;
 } finally { Illuminate\Support\Facades\DB::rollBack(); }
