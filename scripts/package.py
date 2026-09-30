@@ -30,6 +30,7 @@ def build(output: Path) -> None:
 
 
 if __name__ == '__main__':
-    output = ROOT / 'dist' / 'mc-router-0.1.0-dev.zip'
+    version = json.loads((ROOT / 'plugin/mc-router/plugin.json').read_text())['version']
+    output = ROOT / 'dist' / f'mc-router-{version}.zip'
     build(output)
     print(output)

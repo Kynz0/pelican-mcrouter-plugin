@@ -14,7 +14,8 @@ Illuminate\Support\Facades\Http::preventStrayRequests();
 $manifest = plugin_path('mc-router', 'plugin.json');
 $installedManifest = file_get_contents($manifest);
 try {
-    $file = new Illuminate\Http\UploadedFile($root . '/dist/mc-router-0.1.0-dev.zip', 'renamed-prototype.zip', 'application/zip', test: true);
+    $version = json_decode(file_get_contents($root . '/plugin/mc-router/plugin.json'), true)['version'];
+    $file = new Illuminate\Http\UploadedFile($root . '/dist/mc-router-' . $version . '.zip', 'renamed-prototype.zip', 'application/zip', test: true);
     $id = app(App\Services\Helpers\PluginService::class)->downloadPluginFromFile($file, 'mc-router');
     if ($id !== 'mc-router' || !file_exists(plugin_path($id, 'src/McRouterPlugin.php')) || !file_exists(plugin_path($id, 'LICENSE'))) {
         throw new RuntimeException('Archive did not import as expected.');

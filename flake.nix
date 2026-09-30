@@ -9,7 +9,7 @@
       devShells = eachSystem (system:
         let pkgs = nixpkgs.legacyPackages.${system}; in {
           default = pkgs.mkShell {
-            packages = with pkgs; [ php84 php84Packages.composer python3 git curl unzip zip go nodejs yarn ];
+            packages = with pkgs; [ php84 php84Packages.composer python3 git curl unzip zip go nodejs yarn openssh ];
           };
         });
       apps = eachSystem (system:
@@ -18,7 +18,7 @@
           runner = name: script: {
             type = "app";
             program = "${pkgs.writeShellScriptBin name ''
-              export PATH=${pkgs.lib.makeBinPath [ pkgs.php84 pkgs.python3 pkgs.git pkgs.curl pkgs.zip ]}:$PATH
+              export PATH=${pkgs.lib.makeBinPath [ pkgs.php84 pkgs.python3 pkgs.git pkgs.curl pkgs.zip pkgs.openssh ]}:$PATH
               exec bash ${self}/scripts/${script} "$@"
             ''}/bin/${name}";
           };

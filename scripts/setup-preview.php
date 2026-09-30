@@ -15,6 +15,7 @@ Illuminate\Support\Facades\Http::preventStrayRequests();
 Illuminate\Support\Facades\Notification::fake();
 config(['panel.email.send_account_created_notification' => false]);
 $user = App\Models\User::where('email', 'preview@example.test')->first();
+$newUser = !$user;
 if (!$user) {
     $user = app(App\Services\Users\UserCreationService::class)->handle([
         'email' => 'preview@example.test', 'username' => 'preview', 'root_admin' => true,
@@ -30,7 +31,7 @@ foreach (['Preview HDD' => '192.0.2.10', 'Preview SSD' => '192.0.2.20'] as $name
     foreach ([25565, 25566, 25567, 26100] as $port) {
         $allocations[$port] = App\Models\Allocation::firstOrCreate(['node_id' => $node->id, 'ip' => $ip, 'port' => $port]);
     }
-    $pools[$node->id] = array_map(fn ($a) => $a->id, array_slice($allocations, 0, 3, true));
+    $pools[$node->id] = array_values(array_map(fn ($a) => $a->id, array_slice($allocations, 0, 3, true)));
     if ($name === 'Preview HDD') {
         foreach (['Eligible existing server' => 25565, 'Ineligible existing server' => 26100] as $serverName => $port) {
             $server = App\Models\Server::where('name', $serverName)->first()
@@ -40,11 +41,15 @@ foreach (['Preview HDD' => '192.0.2.10', 'Preview SSD' => '192.0.2.20'] as $name
     }
 }
 $env = file_get_contents($panel . '/.env');
-foreach (['MC_ROUTER_SUFFIX' => 'mc.example.org', 'MC_ROUTER_POOLS' => "'" . json_encode($pools, JSON_THROW_ON_ERROR) . "'", 'APP_INSTALLED' => 'true', 'TRUSTED_PROXIES' => '127.0.0.1,::1'] as $key => $value) {
+foreach (['MC_ROUTER_SUFFIX' => 'mc.example.org', 'MC_ROUTER_POOLS' => "'" . json_encode($pools, JSON_THROW_ON_ERROR) . "'", 'APP_INSTALLED' => 'true', 'MC_ROUTER_PREVIEW_ONLY' => 'true', 'TRUSTED_PROXIES' => '127.0.0.1,::1'] as $key => $value) {
     $env = preg_replace('/^' . $key . '=.*\R?/m', '', $env);
     $env = rtrim($env) . "\n$key=$value\n";
 }
 file_put_contents($panel . '/.env', $env);
+if (!$newUser && !in_array('--reset-access', $argv, true)) {
+    echo "Disposable preview fixtures ready; existing test admin password preserved.\n";
+    return;
+}
 $origin = trim(file_get_contents($root . '/.dev/public-url'));
 config(['app.url' => $origin]);
 Illuminate\Support\Facades\URL::useOrigin($origin);
