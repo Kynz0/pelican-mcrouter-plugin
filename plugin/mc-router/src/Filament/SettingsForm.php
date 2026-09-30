@@ -31,6 +31,23 @@ final class SettingsForm
     {
         return [
             \Filament\Schemas\Components\Actions::make([
+                \Filament\Actions\Action::make('mc_router_add_minecraft_tagged')->label("Add all eggs tagged 'minecraft'")
+                    ->icon(\App\Enums\TablerIcon::Tag)->color('gray')
+                    ->action(function (\Filament\Schemas\Components\Utilities\Set $set, \Filament\Schemas\Components\Utilities\Get $get) {
+                        $tagged = \App\Models\Egg::all()
+                            ->filter(fn (\App\Models\Egg $egg) => collect($egg->tags ?? [])
+                                ->contains(fn ($tag) => strcasecmp((string) $tag, 'minecraft') === 0))
+                            ->pluck('id');
+                        $merged = collect($get('eggs') ?? [])->map(fn ($v) => (int) $v)
+                            ->merge($tagged)->unique()->values()->all();
+                        $set('eggs', $merged);
+                        \Filament\Notifications\Notification::make()
+                            ->title($tagged->count() . ' egg(s) tagged minecraft added to the list')
+                            ->body('Review the list and save to apply the "' . \Kynzo\McRouter\Filament\RoutingFields::EGG_FEATURE . '" feature.')
+                            ->success()->send();
+                    }),
+            ])->key('mc-router-settings-actions')->columnSpanFull(),
+            \Filament\Schemas\Components\Actions::make([
                 \Filament\Actions\Action::make('mc_router_test_connection')->label('Test saved router connection')
                     ->authorize(fn () => user()?->isRootAdmin() ?? false)
                     ->visible(fn () => !config('mc-router.preview_only') && app(\Kynzo\McRouter\Services\Settings::class)->get()['mode'] !== 'dry-run')

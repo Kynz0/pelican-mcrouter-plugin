@@ -12,10 +12,12 @@ use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Grid;
-use Filament\Forms\Components\Placeholder;
 use Filament\Schemas\Components\Text;
+use Filament\Support\Enums\FontFamily;
+use Filament\Forms\Components\Placeholder;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Illuminate\Support\HtmlString;
@@ -82,6 +84,35 @@ final class RoutingFields
         }
 
         return $options->first(fn (array $a) => $a['server_id'] === null); // Automatic pick must be free.
+    }
+
+    public static function previewHostname(Get $get, ?Server $record): ?string
+    {
+        if (!$get('mc_router_enabled')) { return null; }
+        try {
+            return Hostname::make((string) $get('mc_router_slug'), app(Settings::class)->get()['suffix'], config('mc-router.reserved', []));
+        } catch (\InvalidArgumentException) { return null; }
+    }
+
+    public static function previewBackend(Get $get, ?Server $record): ?string
+    {
+        if (!$get('mc_router_enabled') || !($allocation = Allocation::find($get('mc_router_allocation_id')))) { return null; }
+        try { return AllocationSelector::backend($allocation->toArray()); } catch (\InvalidArgumentException) { return 'invalid backend address'; }
+    }
+
+    /** @return array{label: string, color: string} */
+    public static function previewStatus(Get $get, ?Server $record, bool $creating): array
+    {
+        $route = self::record($record);
+        if ($creating) { return ['label' => 'Pending — saved with the new server', 'color' => 'warning']; }
+        if (app(Settings::class)->get()['mode'] === 'dry-run') { return ['label' => 'Dry-run — proposal only, nothing applied', 'color' => 'gray']; }
+        return match ($route->status ?? null) {
+            'active' => ['label' => 'Active — routing applied', 'color' => 'success'],
+            'error' => ['label' => 'Error — ' . ($route->last_error ?? 'retry pending'), 'color' => 'danger'],
+            'pending' => ['label' => 'Pending — synchronization queued', 'color' => 'warning'],
+            'removing' => ['label' => 'Removing — waiting for reconciliation', 'color' => 'warning'],
+            default => ['label' => 'Disabled', 'color' => 'gray'],
+        };
     }
 
     public static function previewText(Get $get, ?Server $record, bool $creating): string
@@ -159,8 +190,25 @@ final class RoutingFields
                             $set('mc_router_slug', Hostname::suggest($get('name') ?? 'minecraft'));
                         }
                     }),
-                Placeholder::make('mc_router_info')->hiddenLabel()
-                    ->content(fn (Get $get, ?Server $record) => new HtmlString('<p>' . e(self::previewText($get, $record, $creating)) . '</p>')),
+                Grid::make(1)->schema([
+                    Placeholder::make('mc_router_disabled_info')->hiddenLabel()
+                        ->content('mc-router is disabled. Normal Pelican allocation behavior is unchanged.')
+                        ->visible(fn (Get $get) => !$get('mc_router_enabled')),
+                    TextEntry::make('mc_router_join_address')->label('Join address')
+                        ->state(fn (Get $get, ?Server $record) => self::previewHostname($get, $record))
+                        ->copyable()->fontFamily(FontFamily::Mono)->icon(TablerIcon::WorldWww)
+                        ->placeholder(fn (Get $get, ?Server $record) => self::previewText($get, $record, $creating))
+                        ->visible(fn (Get $get) => (bool) $get('mc_router_enabled')),
+                    TextEntry::make('mc_router_backend')->label('Backend (private)')
+                        ->state(fn (Get $get, ?Server $record) => self::previewBackend($get, $record))
+                        ->fontFamily(FontFamily::Mono)->icon(TablerIcon::Server2)
+                        ->placeholder('No eligible primary selected')
+                        ->visible(fn (Get $get) => (bool) $get('mc_router_enabled')),
+                    TextEntry::make('mc_router_status')->label('Status')->badge()
+                        ->state(fn (Get $get, ?Server $record) => self::previewStatus($get, $record, $creating)['label'])
+                        ->color(fn (Get $get, ?Server $record) => self::previewStatus($get, $record, $creating)['color'])
+                        ->visible(fn (Get $get) => (bool) $get('mc_router_enabled')),
+                ]),
             ]),
             Grid::make(2)->columnSpanFull()->schema([
                 TextInput::make('mc_router_slug')->label('Hostname label')->live(onBlur: true)->maxLength(63)

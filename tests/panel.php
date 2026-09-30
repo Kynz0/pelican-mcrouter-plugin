@@ -93,9 +93,9 @@ try {
     $settingsPage->mountAction(Filament\Actions\Testing\TestAction::make('exclude_settings')->table('mc-router'))
         ->set('mountedActions.0.data.suffix', 'bad..example.org')->callMountedAction()->assertHasFormErrors(['suffix']);
     if (app(Kynzo\McRouter\Services\Settings::class)->get()['suffix'] !== 'saved.example.org') { throw new RuntimeException('Invalid settings were saved.'); }
-    $mcEgg = App\Models\Egg::factory()->create(['name' => 'Fabric']);
-    $otherEgg = App\Models\Egg::factory()->create(['name' => 'Rust']);
     $values = app(Kynzo\McRouter\Services\Settings::class)->get();
+    $mcEgg = App\Models\Egg::factory()->create(['name' => 'Fabric', 'tags' => ['minecraft']]);
+    $otherEgg = App\Models\Egg::factory()->create(['name' => 'Rust']);
     $plugin->saveSettings([...$values, 'eggs' => [$mcEgg->id],
         'pool_rows' => collect($values['pools'])->map(fn ($ids, $nodeId) => ['node_id' => (int) $nodeId, 'allocation_ids' => $ids])->values()->all()]);
     unset($values['pools']);
@@ -128,6 +128,18 @@ try {
     if (in_array(Kynzo\McRouter\Filament\RoutingFields::EGG_FEATURE, $mcEgg->refresh()->features ?? [], true)) {
         throw new RuntimeException('Empty egg list did not remove the mc-router feature.');
     }
+    // Re-add via the settings helper button that collects eggs tagged minecraft.
+    $mountedSchema = $settingsPage->instance()->{'mountedActionSchema0'};
+    $nestedKey = null;
+    foreach ($mountedSchema->getFlatComponents(true, true, true) as $component) {
+        if ($component instanceof Filament\Actions\Action && $component->getName() === 'mc_router_add_minecraft_tagged') {
+            $nestedKey = $component->getSchemaComponent()->getKey();
+        }
+    }
+    if ($nestedKey === null) { throw new RuntimeException('Settings helper button missing.'); }
+    $settingsPage->callAction(Filament\Actions\Testing\TestAction::make('mc_router_add_minecraft_tagged')
+        ->schemaComponent($nestedKey, schema: ''))
+        ->assertSchemaStateSet(['eggs' => [$mcEgg->id]]);
     $ordinary = App\Models\User::factory()->create();
     Illuminate\Support\Facades\Auth::login($ordinary);
     Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\CreateServer::class)->assertForbidden();
@@ -137,7 +149,7 @@ try {
     } catch (Symfony\Component\HttpKernel\Exception\HttpException $e) {
         if ($e->getStatusCode() !== 403) { throw $e; }
     }
-    echo "OK: native creation step/edit tab, actual populated primary selector, slug hydration, specific confirmation, read-only unsaved fields, persisted settings, egg-gated step visibility, gated-egg creation bypass, non-admin denial\n";
+    echo "OK: native creation step/edit tab, actual populated primary selector, slug hydration, specific confirmation, read-only info entries, minecraft-tag helper button, egg-gated step/tab visibility, gated-egg creation bypass, non-admin denial\n";
 } catch (PHPUnit\Framework\ExpectationFailedException $e) {
     echo $e->getComparisonFailure()?->getDiff();
     throw $e;
