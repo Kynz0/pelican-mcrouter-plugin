@@ -6,7 +6,8 @@ synchronization. It is not production-ready. The public demo is forced into
 
 ## Public demo
 
-Use the latest preview link provided in chat and the existing test account:
+**Latest URL: https://tail-ross-nutrition-territory.trycloudflare.com**
+(temporary quick-tunnel; a new URL will be posted if it changes)
 `preview@example.test` (username `preview`). Your chosen password is preserved.
 A fresh preview should have a test admin and sample data ready automatically;
 credentials are never committed or copied from production. If access needs
