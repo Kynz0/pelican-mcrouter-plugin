@@ -46,8 +46,12 @@ foreach (['MC_ROUTER_SUFFIX' => 'mc.example.org', 'MC_ROUTER_POOLS' => "'" . jso
     $env = rtrim($env) . "\n$key=$value\n";
 }
 file_put_contents($panel . '/.env', $env);
+// Reset plugin settings to a known ungated demo state unless --keep-settings.
+app(Kynzo\McRouter\Services\EggFeatureSync::class)->sync([]);
+Illuminate\Support\Facades\DB::table('mc_router_settings')->updateOrInsert(['id' => 1],
+    ['values' => json_encode(['mode' => 'dry-run', 'suffix' => 'mc.example.org', 'eggs' => [], 'pools' => $pools], JSON_THROW_ON_ERROR)]);
 if (!$newUser && !in_array('--reset-access', $argv, true)) {
-    echo "Disposable preview fixtures ready; existing test admin password preserved.\n";
+    echo "Disposable preview fixtures ready; plugin settings reset, existing test admin password preserved.\n";
     return;
 }
 $origin = trim(file_get_contents($root . '/.dev/public-url'));
