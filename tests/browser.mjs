@@ -24,9 +24,10 @@ try {
     await page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 30000 });
     stage = 'creation controls';
     await page.goto(`${origin}/admin/servers/create`, { waitUntil: 'networkidle' });
+    // Fail-closed: with no egg selected the feature-gated step must be hidden.
     const wizardSteps = [...(await page.content()).matchAll(/fi-sc-wizard-header-step-label">([^<]+)</g)].map((m) => m[1]);
-    if (wizardSteps.at(-1) !== 'MC Router') {
-        throw new Error(`MC Router is not the final creation step: ${wizardSteps.join(', ')}`);
+    if (wizardSteps.includes('MC Router')) {
+        throw new Error(`MC Router step visible without an eligible egg: ${wizardSteps.join(', ')}`);
     }
     stage = 'edit tab';
     await page.goto(`${origin}/admin/servers/1/edit?tab=mc-router%3A%3Adata%3A%3Atab`, { waitUntil: 'networkidle' });
