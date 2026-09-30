@@ -20,7 +20,13 @@ try {
     $other = App\Models\Allocation::factory()->create(['node_id' => $node->id, 'ip' => '192.0.2.10', 'port' => 25567]);
     Illuminate\Support\Facades\DB::table('mc_router_settings')->where('id', 1)->delete();
     config(['mc-router.pools' => [$node->id => [$free->id, $other->id]], 'mc-router.preview_only' => true]);
+    // Fail-closed default: without the egg feature the step is not offered at all.
+    $mcEgg = App\Models\Egg::factory()->create(['name' => 'Fabric', 'tags' => ['minecraft']]);
+    $mcEgg->features = [Kynzo\McRouter\Filament\RoutingFields::EGG_FEATURE];
+    $mcEgg->save();
     $wizard = Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\CreateServer::class)
+        ->assertDontSee('MC Router')
+        ->set('data.egg_id', $mcEgg->id)
         ->assertSee('MC Router')
         ->assertSet('data.mc_router_enabled', false)
         ->set('data.allocation_id', $free->id)
@@ -45,7 +51,7 @@ try {
     if (($state['data']['mc_router_slug'] ?? null) !== 'custom' || isset($state['data']['mc_router_normal_node'])) {
         throw new RuntimeException('Plugin payload dehydration failed.');
     }
-    $server = App\Models\Server::factory()->create(['node_id' => $node->id, 'allocation_id' => $other->id]);
+    $server = App\Models\Server::factory()->create(['node_id' => $node->id, 'allocation_id' => $other->id, 'egg_id' => $mcEgg->id]);
     $other->update(['server_id' => $server->id]);
     $edit = Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\EditServer::class, ['record' => $server->id])
         ->assertSee('MC Router');
@@ -72,7 +78,7 @@ try {
     if ($server->refresh()->allocation_id !== $other->id || $free->refresh()->server_id !== null) { throw new RuntimeException('Unsaved preview mutated an allocation.'); }
     config(['mc-router.pools' => [$node->id => [$free->id]]]);
     $legacy = App\Models\Allocation::factory()->create(['node_id' => $node->id, 'ip' => '192.0.2.10', 'port' => 26100]);
-    $legacyServer = App\Models\Server::factory()->create(['node_id' => $node->id, 'allocation_id' => $legacy->id]);
+    $legacyServer = App\Models\Server::factory()->create(['node_id' => $node->id, 'allocation_id' => $legacy->id, 'egg_id' => $mcEgg->id]);
     $legacy->update(['server_id' => $legacyServer->id]);
     $replacement = Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\EditServer::class, ['record' => $legacyServer->id])
         ->set('data.mc_router_enabled', true)
@@ -94,7 +100,6 @@ try {
         ->set('mountedActions.0.data.suffix', 'bad..example.org')->callMountedAction()->assertHasFormErrors(['suffix']);
     if (app(Kynzo\McRouter\Services\Settings::class)->get()['suffix'] !== 'saved.example.org') { throw new RuntimeException('Invalid settings were saved.'); }
     $values = app(Kynzo\McRouter\Services\Settings::class)->get();
-    $mcEgg = App\Models\Egg::factory()->create(['name' => 'Fabric', 'tags' => ['minecraft']]);
     $otherEgg = App\Models\Egg::factory()->create(['name' => 'Rust']);
     $plugin->saveSettings([...$values, 'eggs' => [$mcEgg->id],
         'pool_rows' => collect($values['pools'])->map(fn ($ids, $nodeId) => ['node_id' => (int) $nodeId, 'allocation_ids' => $ids])->values()->all()]);
@@ -116,7 +121,8 @@ try {
         if (Kynzo\McRouter\Models\RouteRecord::where('hostname', 'like', 'gated%')->exists()) { throw new RuntimeException('Gated egg was routed anyway.'); }
     }
     // The edit tab is egg-gated too, but stays available for servers that already route.
-    Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\EditServer::class, ['record' => $legacyServer->id])
+    $nonMcServer = App\Models\Server::factory()->create(['owner_id' => $admin->id, 'node_id' => $node->id, 'allocation_id' => $free->id, 'egg_id' => $otherEgg->id]);
+    Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\EditServer::class, ['record' => $nonMcServer->id])
         ->assertDontSee('Use mc-router');
     $mcServer = App\Models\Server::factory()->create(['owner_id' => $admin->id, 'node_id' => $node->id, 'allocation_id' => $free->id, 'egg_id' => $mcEgg->id]);
     $free->update(['server_id' => $mcServer->id]);

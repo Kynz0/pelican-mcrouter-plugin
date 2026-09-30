@@ -30,6 +30,8 @@ try {
     Illuminate\Support\Facades\Auth::login($admin);
     $node = App\Models\Node::factory()->create();
     $egg = App\Models\Egg::factory()->create();
+    $egg->features = [Kynzo\McRouter\Filament\RoutingFields::EGG_FEATURE];
+    $egg->save();
     $allocations = [];
     for ($port = 25565; $port < 25570; $port++) {
         $allocations[] = App\Models\Allocation::factory()->create(['node_id' => $node->id, 'ip' => '192.0.2.10', 'port' => $port]);

@@ -83,7 +83,7 @@ final class SettingsForm
             ])->helperText('Explicit allocations, including occupied ones that may become available later. Extra mod/voice ports should not be included.'),
             Select::make('eggs')->label('Eggs with MC Router')->multiple()->searchable()
                 ->options(fn () => \App\Models\Egg::orderBy('name')->pluck('name', 'id'))
-                ->helperText('Saving automatically adds or removes the "' . \Kynzo\McRouter\Filament\RoutingFields::EGG_FEATURE . '" egg feature to match this list — eggs with that feature get the creation step and the edit tab (you can also set the feature manually in the egg editor). Leave empty to offer MC Router for every egg; the feature is then removed from all eggs because eligibility no longer depends on it.'),
+                ->helperText('Saving automatically adds or removes the "' . \Kynzo\McRouter\Filament\RoutingFields::EGG_FEATURE . '" egg feature to match this list — eggs with that feature get the creation step and the edit tab (you can also set the feature manually in the egg editor). With no eggs in the list, MC Router is not offered anywhere.'),
             TextInput::make('local_port')->label('Local test API port')->numeric()->minValue(1)->maxValue(65535)
                 ->visible(fn (Get $get) => $get('mode') === 'local'),
             TextInput::make('ssh_host')->label('SSH host')->visible(fn (Get $get) => $get('mode') === 'ssh'),

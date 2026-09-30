@@ -35,10 +35,9 @@ final class RoutingFields
         return $record ? RouteRecord::where('server_uuid', $record->uuid)->first() : null;
     }
 
-    /** The "mc-router" egg feature gates routing; an empty settings list leaves every egg eligible. */
+    /** The "mc-router" egg feature is the single source of truth: no feature, no routing. */
     public static function eggEligible(?int $eggId): bool
     {
-        if (empty(app(Settings::class)->get()['eggs'])) { return true; }
         if (!$eggId || !$egg = Egg::find($eggId)) { return false; }
 
         return in_array(self::EGG_FEATURE, $egg->features ?? [], true);

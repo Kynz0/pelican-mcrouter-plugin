@@ -46,10 +46,15 @@ foreach (['MC_ROUTER_SUFFIX' => 'mc.example.org', 'MC_ROUTER_POOLS' => "'" . jso
     $env = rtrim($env) . "\n$key=$value\n";
 }
 file_put_contents($panel . '/.env', $env);
-// Reset plugin settings to a known ungated demo state unless --keep-settings.
-app(Kynzo\McRouter\Services\EggFeatureSync::class)->sync([]);
+// Reset plugin settings to a known demo state: one feature-enabled demo egg.
+$demoEgg = App\Models\Egg::where('name', 'Demo Minecraft')->first()
+    ?? App\Models\Egg::factory()->create(['name' => 'Demo Minecraft', 'tags' => ['minecraft']]);
+$demoEgg->features = array_values(array_unique([...($demoEgg->features ?? []), Kynzo\McRouter\Filament\RoutingFields::EGG_FEATURE]));
+$demoEgg->save();
+App\Models\Server::whereIn('name', ['Eligible existing server', 'Ineligible existing server'])->update(['egg_id' => $demoEgg->id]);
+app(Kynzo\McRouter\Services\EggFeatureSync::class)->sync([$demoEgg->id]);
 Illuminate\Support\Facades\DB::table('mc_router_settings')->updateOrInsert(['id' => 1],
-    ['values' => json_encode(['mode' => 'dry-run', 'suffix' => 'mc.example.org', 'eggs' => [], 'pools' => $pools], JSON_THROW_ON_ERROR)]);
+    ['values' => json_encode(['mode' => 'dry-run', 'suffix' => 'mc.example.org', 'eggs' => [$demoEgg->id], 'pools' => $pools], JSON_THROW_ON_ERROR)]);
 if (!$newUser && !in_array('--reset-access', $argv, true)) {
     echo "Disposable preview fixtures ready; plugin settings reset, existing test admin password preserved.\n";
     return;
