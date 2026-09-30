@@ -85,6 +85,19 @@ final class RoutingFields
         return $options->first(fn (array $a) => $a['server_id'] === null); // Automatic pick must be free.
     }
 
+    public static function tabNotice(Get $get, ?Server $record, bool $creating): string
+    {
+        if (!self::eggEligible($record?->egg_id)) {
+            $route = self::record($record);
+            $stillClaimed = $route !== null && ($route->enabled || count($route->applied) > 0 || count($route->attempted ?? []) > 0);
+            return $stillClaimed
+                ? 'This server’s egg no longer has the "' . self::EGG_FEATURE . '" feature, but MC Router settings still exist for it. Disable routing below and save to remove them.'
+                : 'This server’s egg no longer has the "' . self::EGG_FEATURE . '" feature. Routing cannot be enabled until the feature is restored.';
+        }
+
+        return '';
+    }
+
     public static function previewHostname(Get $get, ?Server $record): ?string
     {
         if (!$get('mc_router_enabled')) { return null; }
@@ -142,6 +155,9 @@ final class RoutingFields
     public static function fields(bool $creating): array
     {
         $fields = [
+            Text::make(fn (Get $get, ?Server $record) => self::tabNotice($get, $record, $creating))
+                ->columnSpanFull()
+                ->visible(fn (?Server $record) => $record && !self::eggEligible($record->egg_id)),
             Text::make(fn () => app(Settings::class)->get()['mode'] === 'dry-run'
                 ? 'Dry-run: routing choices can be saved, but no existing server ports or mc-router routes will be changed.'
                 : 'Routing uses mc-router. Active means the runtime mapping is accepted, not that Minecraft is online or persistence is guaranteed.')

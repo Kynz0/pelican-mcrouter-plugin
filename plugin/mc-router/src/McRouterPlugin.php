@@ -43,8 +43,12 @@ final class McRouterPlugin implements Plugin, HasPluginSettings
                 ->icon(TablerIcon::Router)
                 ->visible(function (Get $get, ?Server $record) {
                     if (!(user()?->isRootAdmin() ?? false) || !$record) { return false; }
-                    // Servers that already route stay manageable even if their egg is no longer eligible.
-                    return RoutingFields::eggEligible($record->egg_id) || RoutingFields::record($record) !== null;
+                    if (RoutingFields::eggEligible($record->egg_id)) { return true; }
+                    // Egg lost eligibility: keep the tab only while something is still
+                    // claimed (enabled or applied/uncertain), so the admin can clean up.
+                    $route = RoutingFields::record($record);
+
+                    return $route !== null && ($route->enabled || count($route->applied) > 0 || count($route->attempted ?? []) > 0);
                 })
                 ->columns(['default' => 1, 'sm' => 2])
                 ->schema(fn () => RoutingFields::fields(false)));

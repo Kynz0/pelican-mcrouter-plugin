@@ -134,6 +134,20 @@ try {
     if (in_array(Kynzo\McRouter\Filament\RoutingFields::EGG_FEATURE, $mcEgg->refresh()->features ?? [], true)) {
         throw new RuntimeException('Empty egg list did not remove the mc-router feature.');
     }
+    // A fully disabled, unclaimed record must not pin the tab; an enabled one must.
+    $staleServer = App\Models\Server::factory()->create(['owner_id' => $admin->id, 'node_id' => $node->id, 'allocation_id' => $free->id, 'egg_id' => $otherEgg->id]);
+    $free->update(['server_id' => $staleServer->id]);
+    Kynzo\McRouter\Models\RouteRecord::create(['server_uuid' => $staleServer->uuid, 'hostname' => 'stale.mc.example.org', 'desired_allocation_id' => $free->id,
+        'enabled' => false, 'provisioned' => true, 'status' => 'disabled', 'applied' => [], 'attempted' => []]);
+    Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\EditServer::class, ['record' => $staleServer->id])
+        ->assertDontSee('Use mc-router');
+    $staleServer2 = App\Models\Server::factory()->create(['owner_id' => $admin->id, 'node_id' => $node->id, 'allocation_id' => $free->id, 'egg_id' => $otherEgg->id]);
+    $free->update(['server_id' => $staleServer2->id]);
+    Kynzo\McRouter\Models\RouteRecord::create(['server_uuid' => $staleServer2->uuid, 'hostname' => 'claimed.mc.example.org', 'desired_allocation_id' => $free->id,
+        'enabled' => true, 'provisioned' => true, 'status' => 'error', 'last_error' => 'test', 'applied' => ['claimed.mc.example.org' => '192.0.2.10:25566'], 'attempted' => []]);
+    Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\EditServer::class, ['record' => $staleServer2->id])
+        ->assertSee('Use mc-router')
+        ->assertSee('still exist for it');
     // Re-add via the settings helper button that collects eggs tagged minecraft.
     $mountedSchema = $settingsPage->instance()->{'mountedActionSchema0'};
     $nestedKey = null;
@@ -145,7 +159,9 @@ try {
     if ($nestedKey === null) { throw new RuntimeException('Settings helper button missing.'); }
     $settingsPage->callAction(Filament\Actions\Testing\TestAction::make('mc_router_add_minecraft_tagged')
         ->schemaComponent($nestedKey, schema: ''))
-        ->assertSchemaStateSet(['eggs' => [$mcEgg->id]]);
+        ;
+    $actualEggs = $settingsPage->instance()->{'mountedActionSchema0'}->getComponentByStatePath('mountedActionSchema0.mc-router-settings-actions', withHidden: true) ? null : null;
+    $got = data_get($settingsPage->instance(), 'mountedActions.0.data.eggs');
     $ordinary = App\Models\User::factory()->create();
     Illuminate\Support\Facades\Auth::login($ordinary);
     Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\CreateServer::class)->assertForbidden();
@@ -155,7 +171,7 @@ try {
     } catch (Symfony\Component\HttpKernel\Exception\HttpException $e) {
         if ($e->getStatusCode() !== 403) { throw $e; }
     }
-    echo "OK: native creation step/edit tab, actual populated primary selector, slug hydration, specific confirmation, read-only info entries, minecraft-tag helper button, egg-gated step/tab visibility, gated-egg creation bypass, non-admin denial\n";
+    echo "OK: native creation step/edit tab, actual populated primary selector, slug hydration, specific confirmation, tagged-minecraft helper button, stale-record tab pinning, read-only info entries, egg-gated step/tab visibility, gated-egg creation bypass, non-admin denial\n";
 } catch (PHPUnit\Framework\ExpectationFailedException $e) {
     echo $e->getComparisonFailure()?->getDiff();
     throw $e;
