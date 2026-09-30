@@ -21,6 +21,13 @@ final class McRouterProvider extends ServiceProvider
 
     public function boot(): void
     {
+        \App\Models\Allocation::addGlobalScope(new \Kynzo\McRouter\Models\BackendQuarantine());
+        \App\Models\Allocation::saving(function ($allocation) {
+            if ($allocation->server_id !== null && $allocation->isDirty(['server_id', 'ip', 'port'])) {
+                $uuid = Server::whereKey($allocation->server_id)->value('uuid') ?? '';
+                $this->app->make(\Kynzo\McRouter\Services\RouteManager::class)->guardBackend($allocation, $uuid);
+            }
+        });
         // Pinned Livewire update hook: run after the native name state is assigned.
         \Livewire\Livewire::listen('update', function ($component, $path, $value) {
             if ($component instanceof \App\Filament\Admin\Resources\Servers\Pages\CreateServer) {
@@ -51,7 +58,7 @@ final class McRouterProvider extends ServiceProvider
         Server::created(fn (Server $server) => $this->app->make(CreationCapture::class)->created($server));
         Server::updating(function (Server $server) {
             if ($server->isDirty('allocation_id') && $server->allocation_id) {
-                $a = \App\Models\Allocation::find($server->allocation_id);
+                $a = \App\Models\Allocation::withoutGlobalScopes()->find($server->allocation_id);
                 if ($a) { $this->app->make(\Kynzo\McRouter\Services\RouteManager::class)->guardBackend($a, $server->uuid); }
             }
         });

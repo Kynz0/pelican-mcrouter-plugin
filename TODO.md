@@ -2,38 +2,44 @@
 
 ## Confirmed decisions
 
-- Reusable open-source plugin; no personal domain/IP/port assumptions in code.
-- AGPL-3.0-or-later, admin-only including existing-server management.
-- New servers: automatically suggest a free eligible primary allocation; optional override.
-- Existing servers: retain an eligible primary; otherwise request confirmation before selecting a replacement.
-- Configurable hostname suffix and explicit node-scoped allocation pools.
-- Prefer plugin + mc-router only, no custom companion service.
-- Target Panel beta38; do not claim wider compatibility without tests.
+- Reusable open-source plugin; AGPL-3.0-or-later; no personal domain/IP assumptions.
+- Admin-only creation and existing-server management, inside the native wizard/edit tab.
+- New servers: populated eligible primary selector, automatic selection, optional manual choice.
+- Existing servers: retain eligible current primary; otherwise ask for a specific replacement confirmation.
+- Configurable suffix, node-scoped allocation pools and router connection.
+- Plugin + mc-router preferred, without a custom companion service.
+- Pin beta38 compatibility until other versions are tested.
+- Make incremental commits; pre-provision/reuse the disposable test admin and preserve its password.
 
-## Completed first milestone
+## Completed
 
-- [x] Nix shell + runnable dev/test apps, Paseo service and test/lint scripts.
-- [x] Disposable pinned Panel and router harness scripts.
-- [x] Installable, root-admin-only **read-only prototype**.
-- [x] Hostname/allocation/ownership-planning tests and importable archive checks.
-- [x] Actual beta38 Livewire preview and wizard hydration/dehydration tests.
-- [x] Real disposable mc-router REST API/persistence tests.
-- [x] Corrections to AI-written assumptions documented in docs/spike-findings.md.
+- [x] Nix shell/dev/test apps, Paseo service, lint and pinned disposable harnesses.
+- [x] Initial read-only prototype, versioned as its own commit.
+- [x] Move controls into native creation wizard and admin server-edit tab; remove standalone page.
+- [x] Replace optional-override terminology with a populated Primary allocation selector.
+- [x] Replace blanket permission toggle with exact-change confirmation modals.
+- [x] Native plugin settings UI with visible validation before beta38's swallowed save callback.
+- [x] UUID ownership ledger, normalized unique hostname reservations and deletion tombstones.
+- [x] Creation capture under core transaction, no plugin DB lock across Wings, failed creation cleanup.
+- [x] Existing-server primary changes through core services with feature-limit preservation.
+- [x] Native REST client, restricted pinned SSH forwarding, disposable-only loopback HTTP.
+- [x] Queued sync/retries, periodic reconciliation, core allocation/node follow, rename and opt-out.
+- [x] Separate uncertain write intent from confirmed mapping; recover both sides of lost responses.
+- [x] Preserve foreign routes, detect conflicts, quarantine backends until stale ownership is removed.
+- [x] Real Panel/Livewire, mocked-Wings lifecycle, actual router, restricted sshd and archive-import tests.
+- [x] Actual public browser smoke test; independent test account removed afterward.
+- [x] Updated installation, trust, persistence and rollback documentation.
 
-## Before functional v1
+## Before production / stable v1
 
-- [ ] Secure no-companion transport decision and deployment documentation.
-- [ ] Admin settings UI for suffix, pools and connection configuration (secret storage/redaction).
-- [ ] Wizard flow without requiring manual allocation first or hiding a change to core selection.
-- [ ] Revalidate allocation at submit and race-test against Pelican's allocation assignment.
-- [ ] Durable slug uniqueness/server-UUID ledger and lifecycle capture, respecting Wings failure cleanup.
-- [ ] Existing-server actions using Pelican services, explicit reallocation confirmation and authorization.
-- [ ] Revisioned queued sync, deletion tombstones, retries and reconciliation; serialized mutation per router.
-- [ ] Conservative ownership/conflict semantics including rename and out-of-band edits.
-- [ ] Status separation: dry-run, runtime applied, persistence assurance, game-online state.
-- [ ] Tests for transport failures, stale jobs, collisions, deletion/rename and foreign route preservation.
-- [ ] Decide scoped admin-role permissions (prototype is root-admin-only for safety).
-- [x] Validate actual beta38 ZIP import path, including a renamed archive (disposable Panel only).
-- [ ] Safe backup/update/uninstall behavior before route-owning releases.
-- [ ] Task-scoped permission before any live plugin install or infrastructure change.
-- [ ] Disposable live server integration and external Java Minecraft join (not yet authorized).
+- [ ] Review whether trusted Panel-wide API access via SSH is acceptable (no native namespace authorization).
+- [ ] Task-scoped authorization for a live install and any SSH/systemd/permission/DNS/NAT changes.
+- [ ] Validate live router restart durability, writable config/sandbox, backups and restore procedure.
+- [ ] Verify queue workers/scheduler and contention/races under the target live deployment.
+- [ ] SQLite is exercised; test other databases and multi-host/shared lock configurations before claiming support.
+- [ ] Review unsupported complex router discovery/scaling/proxy configuration interactions.
+- [ ] Disposable actual Wings/game creation, failure cleanup, port rebind behavior and external Java join.
+- [ ] Production update/uninstall validation with matched snapshots and worker restarts.
+- [ ] Decide scoped delegated-admin permissions (alpha is root-admin-only).
+- [ ] Optional upstream hook for cleaner first-step placement/filtering of the native primary field.
+- [ ] No adoption of manual routes, multi-router support, Bedrock or voice-port automation yet.

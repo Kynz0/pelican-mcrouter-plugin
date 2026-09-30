@@ -45,7 +45,7 @@ final class Settings
             if (!is_array($ids) || Allocation::where('node_id', $nodeId)->whereIn('id', $ids)->count() !== count(array_unique($ids))) {
                 throw ValidationException::withMessages(['pool_rows' => 'Every approved allocation must belong to its configured node.']);
             }
-            foreach (Allocation::whereIn('id', $ids)->get() as $allocation) {
+            foreach (Allocation::withoutGlobalScopes()->whereIn('id', $ids)->get() as $allocation) {
                 try { \Kynzo\McRouter\Domain\AllocationSelector::backend($allocation->toArray()); }
                 catch (\InvalidArgumentException $e) { throw ValidationException::withMessages(['pool_rows' => $e->getMessage()]); }
             }

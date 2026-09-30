@@ -1,6 +1,6 @@
 # Proposed architecture — validate in a spike
 
-**Historical proposal:** [spike findings](spike-findings.md) supersede the companion-helper assumption. The user prefers plugin + mc-router only. Secure transport to the native REST API, durable ownership and reconciliation are the current direction, not yet a live implementation.
+**Historical proposal:** [spike findings](spike-findings.md) supersede the companion-helper assumption. The user prefers plugin + mc-router only. Secure transport to the native REST API, durable ownership and reconciliation are now implemented/tested locally; see [milestone 2](milestone2.md). Nothing is installed live. Its trust/persistence limitations supersede the earlier independent-helper security claims.
 
 ```text
 Admin Create wizard (toggle + suggested slug)

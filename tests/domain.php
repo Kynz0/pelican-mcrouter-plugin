@@ -59,6 +59,7 @@ foreach ([2, 3, 4, 999] as $id) {
 rejects(fn () => $selector->choose($allocations, 3));
 same('192.0.2.1:25566', AllocationSelector::backend($allocations[0]));
 same('[2001:db8::1]:25565', AllocationSelector::backend(['ip' => '2001:db8::1', 'port' => 25565]));
+same('[2001:db8::1]:25565', AllocationSelector::backend(['ip' => '2001:0db8:0000:0000:0000:0000:0000:0001', 'port' => 25565]));
 rejects(fn () => AllocationSelector::backend(['ip' => 'example.com', 'port' => 25565]));
 rejects(fn () => AllocationSelector::backend(['ip' => '192.0.2.1', 'port' => 0]));
 foreach (['0.0.0.0', '::', '224.0.0.1', 'ff02::1'] as $badBackend) {

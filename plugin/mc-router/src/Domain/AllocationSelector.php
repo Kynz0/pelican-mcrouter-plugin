@@ -64,6 +64,7 @@ final class AllocationSelector
             throw new InvalidArgumentException('Use a real unicast Wings address, not a wildcard, multicast or reserved backend address.');
         }
 
+        $ip = inet_ntop($bytes); // Equivalent IPv6 spellings must share one backend identity.
         return (str_contains($ip, ':') ? "[$ip]" : $ip) . ":$port";
     }
 }

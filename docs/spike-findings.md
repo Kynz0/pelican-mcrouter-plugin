@@ -1,5 +1,7 @@
 # Compatibility spike findings
 
+Historical first-milestone report. [Milestone 2](milestone2.md) now verifies creation capture, native wizard/tab integration and functional local/SSH synchronization beyond this initial read-only spike.
+
 ## Versions and evidence
 
 Disposable upstream checkouts (not live source):

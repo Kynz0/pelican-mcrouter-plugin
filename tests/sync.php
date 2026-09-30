@@ -24,14 +24,16 @@ Http::allowStrayRequests(['http://127.0.0.1:' . $port . '/*']);
 Illuminate\Support\Facades\Queue::fake();
 Filament\Facades\Filament::setCurrentPanel(Filament\Facades\Filament::getPanel('admin'));
 $checks = 0;
-function check(bool $condition, string $message): void {
+function check(bool $condition, string $message): void
+{
     global $checks;
     if (!$condition) { throw new RuntimeException($message); }
     $checks++;
 }
-function invalid(Closure $call): void {
+function invalid(Closure $call, string $label = '?'): void
+{
     try { $call(); } catch (ValidationException) { check(true, 'Expected rejection'); return; }
-    throw new RuntimeException('Expected validation rejection.');
+    throw new RuntimeException('Expected validation rejection: ' . $label);
 }
 DB::beginTransaction();
 try {
@@ -58,8 +60,12 @@ try {
     check($route->fresh()->status === 'active', 'Active state requires readback.');
     check($client->routes()['test.mc.example.org']['backend'] === '192.0.2.10:25565', 'Wrong backend.');
     check($client->routes()['manual.example.org']['backend'] === '192.0.2.99:25565', 'Foreign route changed.');
-    invalid(fn () => $settings->save(['suffix' => 'other.example.org']));
-    invalid(fn () => $manager->save($server, true, 'test', $free->id, 0));
+    invalid(fn () => $settings->save(['suffix' => 'other.example.org']), 'connection change with live claims');
+    $rollback = require $root . '/plugin/mc-router/database/migrations/2026_09_30_000002_add_mc_router_attempts.php';
+    try { $rollback->down(); throw new RuntimeException('Live ownership migration rollback was allowed.'); }
+    catch (RuntimeException $e) { check(str_contains($e->getMessage(), 'before uninstalling'), 'Wrong uninstall guard result.'); }
+    check(Illuminate\Support\Facades\Schema::hasColumn('mc_router_routes', 'attempted'), 'Uninstall guard partially removed schema.');
+    invalid(fn () => $manager->save($server, true, 'test', $free->id, 0), 'unconfirmed primary change');
     check($server->refresh()->allocation_id === $primary->id, 'Unconfirmed change mutated primary.');
     $manager->save($server, true, 'renamed', $primary->id, 0);
     check(DB::table('mc_router_hostnames')->where('hostname', 'test.mc.example.org')->exists(), 'Old name must remain reserved until retired.');
@@ -87,7 +93,7 @@ try {
     });
     $app->instance(RouterClient::class, $lostResponse);
     check(!$sync->sync($route->id), 'Lost response should not claim active.');
-    check($route->fresh()->attempted['renamed.mc.example.org'] === '192.0.2.10:25566', 'Uncertain write intent was lost.');
+    check(($route->fresh()->attempted ?? [])['renamed.mc.example.org'] === '192.0.2.10:25566', 'Uncertain write intent was lost.');
     $app->instance(RouterClient::class, $client);
     check($sync->sync($route->id), 'Allocation follow/lost-response retry failed.');
     check($client->routes()['renamed.mc.example.org']['backend'] === '192.0.2.10:25566', 'Route did not follow primary.');
@@ -120,15 +126,18 @@ try {
     check($sync->sync($route->id), 'Re-enable failed.');
     $otherServer = App\Models\Server::factory()->create(['owner_id' => $admin->id, 'node_id' => $node->id, 'allocation_id' => $another->id]);
     $another->update(['server_id' => $otherServer->id]);
-    invalid(fn () => $manager->save($otherServer, true, 'FINAL', $another->id, 0));
+    invalid(fn () => $manager->save($otherServer, true, 'FINAL', $another->id, 0), 'case-insensitive hostname collision');
     $server->delete();
     $free->update(['server_id' => null]);
     check(!collect(Kynzo\McRouter\Filament\RoutingFields::allocations())->contains('id', $free->id), 'Unremoved old route backend was offered for reuse.');
-    invalid(fn () => App\Models\Server::factory()->create(['owner_id' => $admin->id, 'node_id' => $node->id, 'allocation_id' => $free->id]));
+    invalid(fn () => App\Models\Server::factory()->create(['owner_id' => $admin->id, 'node_id' => $node->id, 'allocation_id' => $free->id]), 'quarantined backend reuse');
     check($sync->sync($route->id), 'Deletion cleanup failed.');
     check(RouteRecord::find($route->id) === null, 'Deleted-server ledger remains.');
     check(!isset($client->routes()['final.mc.example.org']), 'Deleted-server route remains.');
     check(collect(Kynzo\McRouter\Filament\RoutingFields::allocations())->contains('id', $free->id), 'Cleaned backend did not become available again.');
     check(count($client->routes()) === 1 && isset($client->routes()['manual.example.org']), 'Unrelated route preservation failed.');
-    echo "OK: $checks real-router lifecycle checks (apply/readback, rename, core allocation follow, drift repair, uncertain retries, conflicts, opt-out, re-enable, uniqueness, deletion)\n";
-} finally { DB::rollBack(); Mockery::close(); }
+    echo "OK: $checks real-router lifecycle checks (apply/readback, rename, core allocation follow, outage/lost-response recovery, drift repair, uncertain retries, conflicts, opt-out, re-enable, uniqueness, quarantined reuse, guarded uninstall, deletion)\n";
+} finally {
+    DB::rollBack();
+    Mockery::close();
+}

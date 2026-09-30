@@ -13,8 +13,8 @@ return new class extends Migration
     }
     public function down(): void
     {
-        if (\Illuminate\Support\Facades\DB::table('mc_router_routes')->get()->contains(fn ($r) => count(json_decode($r->attempted ?? '{}', true) ?? []) > 0)) {
-            throw new RuntimeException('Reconcile uncertain MC Router writes before uninstalling.');
+        if (\Illuminate\Support\Facades\DB::table('mc_router_routes')->get()->contains(fn ($r) => count(json_decode($r->applied, true) ?? []) > 0 || count(json_decode($r->attempted ?? '{}', true) ?? []) > 0)) {
+            throw new RuntimeException('Disable routing and reconcile all MC Router claims before uninstalling.');
         }
         Schema::table('mc_router_routes', function (Blueprint $table) { $table->dropColumn('attempted'); });
     }

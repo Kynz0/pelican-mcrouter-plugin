@@ -15,7 +15,8 @@ final class CreationCapture
     public function creating(Server $server): void
     {
         if ($server->allocation_id) {
-            $a = \App\Models\Allocation::whereKey($server->allocation_id)->lockForUpdate()->first();
+            // The quarantine scope must not hide the allocation being validated.
+            $a = \App\Models\Allocation::withoutGlobalScopes()->whereKey($server->allocation_id)->lockForUpdate()->first();
             if ($a) { app(RouteManager::class)->guardBackend($a, $server->uuid); }
         }
         if ($this->desired === null) { return; }

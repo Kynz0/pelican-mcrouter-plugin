@@ -11,6 +11,12 @@
           default = pkgs.mkShell {
             packages = with pkgs; [ php84 php84Packages.composer python3 git curl unzip zip go nodejs yarn openssh ];
           };
+        } // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          browser = pkgs.mkShell {
+            inputsFrom = [ self.devShells.${system}.default ];
+            packages = [ pkgs.chromium ];
+            shellHook = ''export PLAYWRIGHT_CHROMIUM_EXECUTABLE=${pkgs.chromium}/bin/chromium'';
+          };
         });
       apps = eachSystem (system:
         let

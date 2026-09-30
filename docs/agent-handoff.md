@@ -1,6 +1,6 @@
 # Coding agent handoff
 
-**Historical plan:** the initial read-only prototype is now implemented. Read [prototype.md](prototype.md), [spike-findings.md](spike-findings.md), and [../TODO.md](../TODO.md) first. They supersede the old helper requirement, wizard-hook placement, namespace assumption, and transaction guidance below. The user has approved local development, AGPL-3.0-or-later, auto-allocation with override, and admin-only existing-server management, not production changes.
+**Current handoff:** 0.2.0-dev now implements the native creation step, admin edit tab, settings, desired-state ledger and tested local/SSH route synchronization. Read [prototype.md](prototype.md), [milestone2.md](milestone2.md), [spike-findings.md](spike-findings.md), and [../TODO.md](../TODO.md) first. Continue making incremental commits. Reuse/provision the test admin automatically and preserve the user's existing preview password; see AGENTS.md. They supersede the old helper requirement, wizard-hook placement, namespace assumption, and transaction guidance below. The user has approved local development, AGPL-3.0-or-later, auto-allocation with override, and admin-only existing-server management, not production changes.
 
 The original handoff started from a planning workspace with **no plugin code yet**. Follow this order; stop and ask the user (by ending your turn with a short status) before anything that touches production. Core Pelican and mc-router are deployed and must not be modified casually.
 

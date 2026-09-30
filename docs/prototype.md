@@ -1,100 +1,122 @@
-# Trying the dry-run prototype
+# Trying the development alpha
 
-**Version 0.1.0-dev is a UI/compatibility prototype, not the finished v1.**
-It reads Panel nodes, allocations and servers. It does not contact mc-router,
-change server ports, reserve hostnames, create servers or write routing records.
-Only root admins can access its page; delegated-admin permissions are future work.
-Nothing is added to the normal server console/files area.
+**Version 0.2.0-dev** adds native admin controls, settings and locally tested route
+synchronization. It is not production-ready. The public demo is forced into
+**dry-run**, uses fake documentation-range nodes and cannot reach real games.
 
-## Disposable local Panel (recommended)
+## Public demo
+
+Use the latest preview link provided in chat and the existing test account:
+`preview@example.test` (username `preview`). Your chosen password is preserved.
+A fresh preview should have a test admin and sample data ready automatically;
+credentials are never committed or copied from production. If access needs
+resetting, provide a private password-setup link, not a weak public admin password.
+
+Try:
+
+1. **Admin → Servers → Create → MC Router**: enable Use mc-router. The Primary
+   allocation is already selected; choose another eligible one if desired.
+   Continue to Information to enter the normal server name; its next state update
+   suggests the slug unless you edited it. The selection is mirrored between
+   steps. Do not submit expecting a game server: the demo has no real Wings.
+2. **Admin → Servers → Edit → MC Router**: enable routing on Eligible existing
+   server to keep its port. On Ineligible existing server, approve automatic
+   replacement in the modal. Save with **Save MC Router settings** inside the tab.
+   Dry-run stores the proposal without changing the server port or router.
+3. **Admin → Plugins → MC Router → Settings**: configure the suffix and approved
+   allocation pools. The public demo offers dry-run only; real connection settings
+   are deliberately unavailable there.
+
+There is no separate routing page anymore. Nothing is added to console/files.
+Only root admins can access these controls in this alpha.
+
+## Disposable local harness
 
 From the repository root:
 
 ```sh
 nix develop -c bash scripts/setup-panel.sh
 nix develop -c bash scripts/setup-router.sh
-nix develop -c php tests/panel.php
-nix develop -c python3 tests/router_api.py
 nix run .#test
-```
-
-The harness pins Panel beta38 and mc-router v1.47.1, installs dependencies,
-generates a plugin skeleton, installs this plugin through Panel's plugin command,
-and builds Panel assets. Everything lives under ignored `.dev/`.
-No production checkout, secrets or database are copied.
-
-Create a local admin interactively (choose your own disposable password):
-
-```sh
-nix develop -c bash -c 'cd .dev/panel && php artisan p:user:make'
+nix develop -c bash scripts/integration.sh
 paseo script start dev --cwd "$PWD"
 ```
 
-Open the assigned local Paseo service address. The dev script uses the assigned
-Paseo URL for asset origins; `MC_ROUTER_PREVIEW_URL` can override it when using a
-separate preview address. Set up disposable nodes and
-allocations in the local admin area. No actual Wings is required for previewing
-allocations; **do not enter production Wings tokens**.
+The harness pins Panel beta38 and mc-router v1.47.1. It installs the plugin through
+Panel's plugin command and builds assets, all under ignored `.dev/`. No production
+checkout, environment, database or credentials are copied.
 
-## Configuration
+For a temporary public preview, run `paseshare <assigned-port> --detach` and write
+only its HTTPS origin (no trailing slash) to `.dev/public-url`. The disposable
+development router reads this on each request, keeping asset/signed-link origins
+correct without losing Paseo's service port.
 
-The prototype uses prefixed configuration variables (in the disposable Panel's
-local environment):
-
-```text
-MC_ROUTER_SUFFIX=mc.example.org
-MC_ROUTER_POOLS='{"1":[10,11,12],"2":[20,21]}'
+```sh
+nix develop -c php scripts/setup-preview.php
 ```
 
-Pools contain **allocation IDs**, grouped by **node ID**, not raw port numbers.
-Use your local allocation IDs. No pool is approved by default. Restart the local
-Paseo service after changing configuration. A proper admin settings UI is planned
-for v1; these are prototype configuration instructions only.
+This adds fake sample nodes/allocations/servers, enforces dry-run, and provisions
+the test admin if missing. Existing passwords are preserved. Use `--reset-access`
+only when requested; its signed password-setup link expires after 60 minutes.
+Do not put real backups, secrets or Wings credentials into the public demo.
 
-Under Admin → MC Router (prototype):
+Optional Linux browser smoke test (temporary separate account, automatically
+removed; requires a running preview and `.dev/public-url`):
 
-- Leave existing server blank to preview a new-server allocation. The first free
-  eligible allocation is suggested automatically; the dropdown is an override.
-- Choose an existing server to keep its eligible current primary allocation.
-  If it is ineligible, a replacement is proposed with a confirmation requirement.
-  Even after confirming, this prototype still makes **no changes**.
-- Edit the hostname; subsequent name edits no longer replace it.
+```sh
+nix develop .#browser -c bash scripts/browser-smoke.sh
+```
 
-## Temporary public preview
+The browser shell includes Chromium; pinned Playwright dependencies are installed
+from `tests/browser-harness/package-lock.json`. A trusted local Chromium can also
+be used with `PLAYWRIGHT_CHROMIUM_EXECUTABLE` in the default shell. No sudo or
+system browser-dependency installation is needed.
 
-Start the Paseo `dev` service, then run `paseshare <assigned-port> --detach`.
-Write only the resulting HTTPS origin (no trailing slash) to ignored
-`.dev/public-url`. The local development router reads it on each request so
-Panel assets and signed links use the tunnel address without changing ports.
+## Operator configuration
 
-`nix develop -c php scripts/setup-preview.php` adds sample documentation-range
-nodes, free/occupied allocations, eligible/ineligible existing servers and a
-synthetic test admin. It trusts only the loopback proxy and prints a signed
-password-setup link so the user can choose their own disposable password. The
-link expires after 60 minutes; keep it private. No production credentials or
-actual Wings services are used. Do not upload real backups/secrets to this
-publicly reachable disposable Panel. The quick-tunnel URL is temporary.
+Use **Admin → Plugins → MC Router → Settings**. Approve allocation **IDs**, grouped
+by node—not arbitrary port numbers. Occupied allocations may be included; only
+free or already-owned eligible allocations are selectable. Backend addresses
+must be actual unicast Wings addresses, not `0.0.0.0`, multicast, UI aliases or
+public router hostnames. Verify reachability from the router separately.
 
-## Importable archive
+Dry-run is the default. Live SSH mode needs a reviewed restricted forwarding
+account, Panel-local dedicated key file and pinned known_hosts file. The form
+accepts **file paths only**, never private-key contents or general root credentials.
+Local HTTP mode is restricted to disposable local/testing application environments.
+Changing a connection/suffix while confirmed or uncertain live routes remain is
+blocked; remove managed routes through their original connection first.
+
+Normal deployment also needs working Panel queue workers and scheduler. The
+plugin schedules reconciliation every minute. `php artisan mc-router:reconcile`
+queues a manual pass. Do not run that against production without authorization.
+
+## Importable archive and rollback
 
 ```sh
 nix develop -c python3 scripts/package.py
 ```
 
-Output: `dist/mc-router-0.1.0-dev.zip`. It contains only the plugin, license and
-these instructions—not the harness, configuration, credentials or runtime state.
-Panel supports Admin → Plugins → Import → Install. Installation may run build
-steps on Panel and change plugin metadata; trying the archive on a live Panel
-therefore still needs explicit approval and a backup. **No live install has been
-performed or authorized by this prototype's development.**
+Output: `dist/mc-router-0.2.0-dev.zip`. Only plugin code, license and these
+instructions are included—not credentials, harness, runtime metadata or a database.
 
-Disable the plugin to hide the preview. Uninstall removes the prototype; it has
-no plugin tables or router routes to clean up. These rollback instructions do
-not apply to future versions that actually manage routes.
+Panel supports **Admin → Plugins → Import → Install**. Installation changes plugin
+files/metadata, runs migrations and may build assets. It has been tested only on
+the disposable Panel. A live installation still needs explicit approval and a
+backup, including the plugin tables and the router config.
+
+Disable routing per server and let reconciliation remove all owned/uncertain
+routes before uninstalling. Migration rollback refuses to discard tracked live
+claims. Disable the plugin only after cleanup; disabling it does not remove routes
+and stops reconciliation. Resolve external ownership conflicts explicitly rather
+than deleting unrelated mappings. Restart workers after approved plugin updates.
+Restoring an older alpha ZIP may be incompatible with the new database schema;
+restore a matching backup rather than blindly downgrading.
 
 ## Verification limits
 
-The local tests prove Livewire rendering/hydration, suggestion and overrides,
-existing-server confirmation messaging, non-admin denial, and custom wizard-step
-dehydration. They do not prove successful Wings creation, lifecycle persistence,
-allocation races, Minecraft joins, or secure production transport.
+See the milestone findings for evidence and remaining gates. Active indicates
+**effective runtime mapping**, not game-online state or guaranteed persistence.
+mc-router can report success despite a failed file save. Before live deployment,
+verify router-owned writable configuration, snapshots, restart persistence and
+external Minecraft status/join behavior on an explicitly approved disposable game.

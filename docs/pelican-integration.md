@@ -1,6 +1,6 @@
 # Installed Pelican integration research
 
-**Historical AI-written research:** see [spike findings](spike-findings.md) for current pinned-source verification and corrections. In particular, custom steps go before/after all built-in steps, and mc-router has a native mutation API with persistence limitations.
+**Historical AI-written research:** see [spike findings](spike-findings.md) for current pinned-source verification and corrections. In particular, custom steps go before/after all built-in steps, and mc-router has a native mutation API with persistence limitations. [Milestone 2](milestone2.md) records the implemented native edit-tab and creation/lifecycle integration.
 
 Target **the deployed Panel v1.0.0-beta38**, not moving `main`. Official [plugin documentation](https://pelican.dev/docs/panel/advanced/plugins/) warns that the system is still evolving. `php artisan help p:plugin:make` on the installed Panel exposes `--name`, `--author`, `--description`, `--category`, `--panels`, `--panelVersion`, etc.; use `php artisan p:plugin:make` in a disposable checkout, not the live Panel, when beginning implementation. A plugin should specify a Panel compatibility version and avoid core edits.
 
