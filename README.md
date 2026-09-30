@@ -12,6 +12,7 @@ been modified and no production installation is approved.
 
 - [Try the alpha / installation instructions](docs/prototype.md)
 - [Milestone 2 findings and remaining gates](docs/milestone2.md)
+- [Next-session handoff (live integration)](docs/handoff-live.md)
 - [Original compatibility spike](docs/spike-findings.md)
 - [Implementation checklist](TODO.md)
 - [Documentation map](docs/README.md)
