@@ -91,13 +91,15 @@ nix develop -c python3 tests/ssh_driver.py
 - 42 pure hostname/allocation/ownership checks and 11 HTTP framing checks.
 - Actual native Livewire wizard/tab state, populated primary selection, core
   selector mirroring, toggle-off restoration, specific confirmation dialogs,
-  edit-tab save, settings slide-over save/validation and non-admin rejection.
+  edit-tab save, settings slide-over save/validation, egg-gated step visibility
+  and non-admin rejection.
 - 26 checks using real Panel creation/build services with mocked Wings: disabled
   flow, successful capture, duplicate rollback, network-boundary transaction
   depth, failed Wings cleanup/slug reuse and confirmed primary replacement.
-- 45 checks against a real temporary mc-router: apply/readback, rename, allocation
+- 52 checks against a real temporary mc-router: apply/readback, rename, allocation
   follow, outage recovery, drift, uncertain retries, foreign conflicts, opt-out,
-  re-enable, uniqueness, deletion, quarantined backend reuse, guarded migration rollback and unrelated routes.
+  re-enable, uniqueness, deletion, quarantined backend reuse, guarded migration
+  rollback, display-alias protection/adoption and unrelated routes.
 - A real unprivileged temporary sshd and router verify `ssh -W` apply/read/delete,
   large/chunked responses, host-key rejection, remote command denial and rejection
   of non-allowlisted forward destinations. No live SSH configuration was changed.

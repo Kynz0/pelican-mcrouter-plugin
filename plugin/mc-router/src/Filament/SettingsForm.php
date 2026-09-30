@@ -64,6 +64,9 @@ final class SettingsForm
                     ->options(fn (Get $get) => Allocation::where('node_id', $get('node_id'))->orderBy('port')->get()
                         ->mapWithKeys(fn ($a) => [$a->id => $a->ip . ':' . $a->port . ($a->server_id ? ' (assigned)' : '')])),
             ])->helperText('Explicit allocations, including occupied ones that may become available later. Extra mod/voice ports should not be included.'),
+            Select::make('eggs')->label('Offer routing for these eggs only')->multiple()->searchable()
+                ->options(fn () => \App\Models\Egg::orderBy('name')->pluck('name', 'id'))
+                ->helperText('Leave empty to offer MC Router for every egg. The creation step only appears after one of these eggs is selected.'),
             TextInput::make('local_port')->label('Local test API port')->numeric()->minValue(1)->maxValue(65535)
                 ->visible(fn (Get $get) => $get('mode') === 'local'),
             TextInput::make('ssh_host')->label('SSH host')->visible(fn (Get $get) => $get('mode') === 'ssh'),

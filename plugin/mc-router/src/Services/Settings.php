@@ -17,7 +17,7 @@ final class Settings
     {
         $defaults = [
             'mode' => 'dry-run', 'suffix' => config('mc-router.suffix', 'mc.example.org'),
-            'pools' => config('mc-router.pools', []), 'local_port' => 25564,
+            'pools' => config('mc-router.pools', []), 'eggs' => [], 'local_port' => 25564,
             'ssh_host' => '', 'ssh_port' => 22, 'ssh_user' => '', 'ssh_api_port' => 25564,
             'ssh_key_path' => '', 'ssh_known_hosts_path' => '',
         ];
@@ -41,6 +41,11 @@ final class Settings
             || ($values['mode'] === 'local' && !app()->environment('local', 'testing'))) {
             throw ValidationException::withMessages(['mode' => 'This transport is not permitted. Local HTTP is for disposable local testing only.']);
         }
+        $eggs = array_values(array_unique(array_map('intval', $values['eggs'] ?? [])));
+        if ($eggs && \App\Models\Egg::whereIn('id', $eggs)->count() !== count($eggs)) {
+            throw ValidationException::withMessages(['eggs' => 'One of the selected eggs no longer exists.']);
+        }
+        $values['eggs'] = $eggs;
         foreach ($values['pools'] as $nodeId => $ids) {
             if (!is_array($ids) || Allocation::where('node_id', $nodeId)->whereIn('id', $ids)->count() !== count(array_unique($ids))) {
                 throw ValidationException::withMessages(['pool_rows' => 'Every approved allocation must belong to its configured node.']);

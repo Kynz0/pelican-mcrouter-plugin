@@ -97,6 +97,7 @@ try {
     $app->instance(RouterClient::class, $client);
     check($sync->sync($route->id), 'Allocation follow/lost-response retry failed.');
     check($client->routes()['renamed.mc.example.org']['backend'] === '192.0.2.10:25566', 'Route did not follow primary.');
+    check($free->refresh()->ip_alias === 'renamed.mc.example.org', 'Primary allocation display alias was not applied.');
     // An uncertain retry may observe either the previous or attempted backend.
     $route->refresh()->update(['applied' => ['renamed.mc.example.org' => '192.0.2.10:25565'], 'attempted' => ['renamed.mc.example.org' => '192.0.2.10:25566']]);
     check($sync->sync($route->id), 'Post-timeout readback recovery failed.');
@@ -115,6 +116,7 @@ try {
     check($sync->sync($route->id), 'Owned route cleanup failed.');
     check(!isset($client->routes()['renamed.mc.example.org']), 'Opt-out route remains.');
     check(!DB::table('mc_router_hostnames')->where('route_id', $route->id)->exists(), 'Opt-out reservation remains.');
+    check($free->refresh()->ip_alias === null, 'Opt-out did not clear the display alias.');
     $client->apply('collision.mc.example.org', '192.0.2.10:25566');
     $manager->save($server, true, 'collision', $free->id, 0);
     check(!$sync->sync($route->id), 'Same-backend foreign route was silently adopted.');
@@ -124,6 +126,13 @@ try {
     $client->remove('collision.mc.example.org');
     $manager->save($server, true, 'final', $free->id, 0);
     check($sync->sync($route->id), 'Re-enable failed.');
+    check($free->refresh()->ip_alias === 'final.mc.example.org', 'Primary allocation display alias was not applied.');
+    $free->update(['ip_alias' => 'legacy.example.org']);
+    check($sync->sync($route->id), 'Alias protection sync failed.');
+    check($free->refresh()->ip_alias === 'legacy.example.org', 'Pre-existing custom alias was overwritten.');
+    $free->update(['ip_alias' => null]);
+    check($sync->sync($route->id), 'Alias adoption sync failed.');
+    check($free->refresh()->ip_alias === 'final.mc.example.org', 'Alias was not adopted after custom alias cleared.');
     $otherServer = App\Models\Server::factory()->create(['owner_id' => $admin->id, 'node_id' => $node->id, 'allocation_id' => $another->id]);
     $another->update(['server_id' => $otherServer->id]);
     invalid(fn () => $manager->save($otherServer, true, 'FINAL', $another->id, 0), 'case-insensitive hostname collision');

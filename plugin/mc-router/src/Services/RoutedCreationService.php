@@ -18,6 +18,11 @@ final class RoutedCreationService extends ServerCreationService
     public function handle(array $data, ?DeploymentObject $deployment = null): Server
     {
         $enabled = (bool) ($data['mc_router_enabled'] ?? false);
+        $eggs = app(Settings::class)->get()['eggs'] ?? [];
+        if ($enabled && $eggs && !in_array((int) ($data['egg_id'] ?? 0), array_map('intval', $eggs), true)) {
+            // Step is hidden for this egg; do not route silently from stale toggle state.
+            $enabled = false;
+        }
         $slug = (string) ($data['mc_router_slug'] ?? '');
         $chosen = (int) ($data['mc_router_allocation_id'] ?? 0);
         foreach (array_keys($data) as $key) {

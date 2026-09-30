@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 namespace Kynzo\McRouter\Filament;
 
+use App\Enums\TablerIcon;
 use App\Models\Allocation;
-use App\Models\Node;
+use App\Models\Egg;
 use App\Models\Server;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Hidden;
@@ -24,25 +25,33 @@ use Kynzo\McRouter\Services\Settings;
 
 final class RoutingFields
 {
-    public static function record(?Server $server): ?RouteRecord
+    public static function record(?Server $record): ?RouteRecord
     {
-        return $server ? RouteRecord::where('server_uuid', $server->uuid)->first() : null;
+        return $record ? RouteRecord::where('server_uuid', $record->uuid)->first() : null;
     }
 
+    /** @return array<int, array<string, mixed>> allocations in approved pools, minus ports claimed by other servers' routes */
     public static function allocations(): array
     {
-        $allocations = Allocation::whereIn('node_id', array_keys(app(Settings::class)->get()['pools']))
+        $settings = app(Settings::class)->get();
+        $allocations = Allocation::withoutGlobalScopes()
+            ->whereIn('node_id', array_keys($settings['pools']))
             ->get(['id', 'node_id', 'server_id', 'ip', 'port'])->toArray();
         $owners = Server::whereIn('id', array_filter(array_column($allocations, 'server_id')))->pluck('uuid', 'id');
         $claims = [];
         foreach (RouteRecord::get() as $route) {
-            foreach ([...array_values($route->applied), ...array_values($route->attempted ?? [])] as $backend) { $claims[$backend][] = $route->server_uuid; }
+            foreach ([...array_values($route->applied), ...array_values($route->attempted ?? [])] as $backend) {
+                $claims[$backend][] = $route->server_uuid;
+            }
         }
-        return array_values(array_filter($allocations, function ($a) use ($claims, $owners) {
+
+        return array_values(array_filter($allocations, function (array $a) use ($claims, $owners) {
+            try { $backend = AllocationSelector::backend($a); } catch (\InvalidArgumentException) { return false; }
             $owner = $owners[$a['server_id']] ?? null;
-            try { $backend = AllocationSelector::backend($a); }
-            catch (\InvalidArgumentException) { return false; }
-            foreach ($claims[$backend] ?? [] as $claimOwner) { if ($owner !== $claimOwner) { return false; } }
+            foreach ($claims[$backend] ?? [] as $claimOwner) {
+                if ($owner !== $claimOwner) { return false; }
+            }
+
             return true;
         }));
     }
@@ -52,108 +61,138 @@ final class RoutingFields
         return new AllocationSelector(app(Settings::class)->get()['pools']);
     }
 
+    /** @param array<int, array<string, mixed>> $allocations */
+    public static function autoAllocation(int $nodeId, array $allocations, ?int $currentId = null, ?int $serverId = null): ?array
+    {
+        $options = collect(self::selector()->options($allocations, $nodeId, $serverId));
+        if ($currentId !== null && ($kept = $options->firstWhere('id', $currentId)) !== null) {
+            return $kept; // Keep the current primary when it is already eligible.
+        }
+
+        return $options->first(fn (array $a) => $a['server_id'] === null); // Automatic pick must be free.
+    }
+
+    public static function previewText(Get $get, ?Server $record, bool $creating): string
+    {
+        if (!$get('mc_router_enabled')) {
+            return 'mc-router is disabled. Normal Pelican allocation behavior is unchanged.';
+        }
+        $route = self::record($record);
+        $status = $route ? " Stored status: {$route->status}." . ($route->last_error ? ' ' . $route->last_error : '') : '';
+        try {
+            $hostname = Hostname::make((string) $get('mc_router_slug'), app(Settings::class)->get()['suffix'], config('mc-router.reserved', []));
+        } catch (\InvalidArgumentException $e) {
+            return $e->getMessage();
+        }
+        $allocation = Allocation::find($get('mc_router_allocation_id'));
+        if (!$allocation) {
+            return "Join address: $hostname. No eligible primary is selected yet; choose one below or change the node.";
+        }
+        try { $backend = AllocationSelector::backend($allocation->toArray()); } catch (\InvalidArgumentException) { $backend = 'invalid backend address'; }
+        $mismatch = $creating && (int) $get('allocation_id') !== (int) $get('mc_router_allocation_id')
+            ? ' The Information step’s primary differs; creation will reject mismatched choices.'
+            : '';
+
+        return "Join address: $hostname (public TCP 25565) → $backend.$mismatch$status";
+    }
+
+    /** @return array<int, \Filament\Schemas\Components\Component> */
     public static function fields(bool $creating): array
     {
         $fields = [
             Text::make(fn () => app(Settings::class)->get()['mode'] === 'dry-run'
                 ? 'Dry-run: routing choices can be saved, but no existing server ports or mc-router routes will be changed.'
-                : 'Routing uses mc-router. Active means runtime mapping accepted, not Minecraft online or guaranteed disk persistence.'),
-            Toggle::make('mc_router_enabled')->label('Use mc-router')->live()->default(fn (?Server $record) => self::record($record)?->enabled ?? false)
+                : 'Routing uses mc-router. Active means the runtime mapping is accepted, not that Minecraft is online or persistence is guaranteed.')
+                ->columnSpanFull(),
+            Toggle::make('mc_router_enabled')->label('Use mc-router')->live()->inline(false)
+                ->default(fn (?Server $record) => self::record($record)?->enabled ?? false)
                 ->dehydrated($creating)
                 ->afterStateUpdated(function ($state, Get $get, Set $set, ?Server $record, $livewire) use ($creating) {
                     $set('mc_router_confirmed_allocation', null);
-                    if (!$state) {
-                        if ($creating && $get('mc_router_saved_normal')) {
-                            $set('node_id', $get('mc_router_normal_node'));
-                            $set('allocation_id', $get('mc_router_normal_allocation'));
-                            $set('allocation_additional', $get('mc_router_normal_additional'));
-                            $livewire->node = Node::find($get('node_id'));
+                    if (!$creating) {
+                        if ($state && $record) {
+                            $route = self::record($record);
+                            $preferred = $route?->enabled ? ($route->desired_allocation_id ?? $record->allocation_id) : $record->allocation_id;
+                            // Keep an eligible current primary; an ineligible one stays empty
+                            // until the admin explicitly approves automatic replacement.
+                            $chosen = collect(self::selector()->options(self::allocations(), $record->node_id, $record->id))->firstWhere('id', $preferred);
+                            $set('mc_router_allocation_id', $chosen['id'] ?? null);
+                            if (!$get('mc_router_slug_edited')) {
+                                $set('mc_router_slug', $route ? explode('.', $route->hostname)[0] : Hostname::suggest($record->name));
+                            }
                         }
+
                         return;
                     }
-                    if ($creating) {
-                        $set('mc_router_normal_node', $get('node_id'));
-                        $set('mc_router_normal_allocation', $get('allocation_id'));
-                        $set('mc_router_normal_additional', $get('allocation_additional'));
-                        $set('mc_router_saved_normal', true);
-                        $nodeId = (int) $get('mc_router_node_id');
-                        $set('node_id', $nodeId);
-                        $livewire->node = Node::find($nodeId);
-                    } else {
-                        $nodeId = $record->node_id;
-                    }
-                    $current = $creating ? $get('allocation_id') : $record->allocation_id;
-                    $options = self::selector()->options(self::allocations(), $nodeId, $record?->id);
-                    $kept = collect($options)->firstWhere('id', (int) $current);
-                    $chosen = $kept ?? ($creating ? (collect($options)->first()) : null);
-                    $set('mc_router_allocation_id', $chosen['id'] ?? null);
-                    if ($creating) {
-                        $set('allocation_id', $chosen['id'] ?? null);
-                        if (($chosen['id'] ?? null) !== (int) $get('mc_router_normal_allocation') || $nodeId !== (int) $get('mc_router_normal_node')) {
-                            $set('allocation_additional', null);
+                    if (!$state) {
+                        if ($get('mc_router_saved_normal')) {
+                            $set('allocation_id', $get('mc_router_normal_allocation'));
+                            $set('allocation_additional', $get('mc_router_normal_additional'));
+                            $livewire->node = \App\Models\Node::find($get('node_id'));
                         }
+
+                        return;
+                    }
+                    $set('mc_router_normal_allocation', $get('allocation_id'));
+                    $set('mc_router_normal_additional', $get('allocation_additional'));
+                    $set('mc_router_saved_normal', true);
+                    $chosen = self::autoAllocation((int) $get('node_id'), self::allocations(), (int) $get('allocation_id'));
+                    $set('mc_router_allocation_id', $chosen['id'] ?? null);
+                    $set('allocation_id', $chosen['id'] ?? null);
+                    if (($chosen['id'] ?? null) !== $get('mc_router_normal_allocation')) {
+                        $set('allocation_additional', null);
                     }
                     if (!$get('mc_router_slug_edited')) {
-                        $set('mc_router_slug', Hostname::suggest($record?->name ?? $get('name') ?? 'minecraft'));
+                        $set('mc_router_slug', Hostname::suggest($get('name') ?? 'minecraft'));
                     }
                 }),
             Hidden::make('mc_router_slug_edited')->default(false)->dehydrated(false),
             Hidden::make('mc_router_confirmed_allocation')->dehydrated(false),
-            Hidden::make('mc_router_normal_node')->dehydrated(false),
             Hidden::make('mc_router_normal_allocation')->dehydrated(false),
             Hidden::make('mc_router_normal_additional')->dehydrated(false),
             Hidden::make('mc_router_saved_normal')->dehydrated(false),
-        ];
-        if ($creating) {
-            $fields[] = Select::make('mc_router_node_id')->label('Wings node')->live()->dehydrated(false)
+            TextInput::make('mc_router_slug')->label('Hostname label')->live(onBlur: true)->maxLength(63)
+                ->prefixIcon(TablerIcon::Link)->suffix('.' . app(Settings::class)->get()['suffix'])
+                ->default(fn (?Server $record) => ($route = self::record($record)) ? explode('.', $route->hostname)[0] : Hostname::suggest($record?->name ?? 'minecraft'))
+                ->visible(fn (Get $get) => (bool) $get('mc_router_enabled'))->dehydrated($creating)
+                ->required(fn (Get $get) => $creating && $get('mc_router_enabled'))
+                ->afterStateUpdated(fn (Set $set) => $set('mc_router_slug_edited', true)),
+            Select::make('mc_router_allocation_id')->label('Primary allocation')->live()->dehydrated($creating)
+                ->prefixIcon(TablerIcon::Network)->selectablePlaceholder(false)
+                ->placeholder('No eligible primary selected')
                 ->visible(fn (Get $get) => (bool) $get('mc_router_enabled'))
-                ->options(fn () => user()?->accessibleNodes()->whereIn('id', array_keys(app(Settings::class)->get()['pools']))->pluck('name', 'id') ?? [])
-                ->default(fn () => user()?->accessibleNodes()->whereIn('id', array_keys(app(Settings::class)->get()['pools']))->orderBy('id')->value('id'))
-                ->afterStateUpdated(function ($state, Get $get, Set $set, $livewire) {
-                    $set('node_id', $state);
-                    $livewire->node = Node::find($state);
-                    $chosen = self::selector()->options(self::allocations(), (int) $state)[0] ?? null;
-                    $set('mc_router_allocation_id', $chosen['id'] ?? null);
-                    $set('allocation_id', $chosen['id'] ?? null);
-                    $set('allocation_additional', null);
-                });
-        }
-        $fields[] = TextInput::make('mc_router_slug')->label('Hostname label')->live(onBlur: true)->maxLength(63)
-            ->default(fn (?Server $record) => self::record($record) ? explode('.', self::record($record)->hostname)[0] : Hostname::suggest($record?->name ?? 'minecraft'))
-            ->visible(fn (Get $get) => (bool) $get('mc_router_enabled'))->dehydrated($creating)
-            ->required(fn (Get $get) => $creating && $get('mc_router_enabled'))
-            ->afterStateUpdated(fn (Set $set) => $set('mc_router_slug_edited', true));
-        $fields[] = Select::make('mc_router_allocation_id')->label('Primary allocation')->live()->dehydrated($creating)
-            ->visible(fn (Get $get) => (bool) $get('mc_router_enabled'))
-            ->placeholder('No eligible primary selected')->selectablePlaceholder(false)
-            ->default(function (?Server $record) {
-                if (!$record) { return null; }
-                $route = self::record($record);
-                $preferred = $route?->enabled ? ($route->desired_allocation_id ?? $record->allocation_id) : $record->allocation_id;
-                return collect(self::selector()->options(self::allocations(), $record->node_id, $record->id))->firstWhere('id', $preferred)['id'] ?? null;
-            })
-            ->options(fn (Get $get, ?Server $record) => collect(self::selector()->options(self::allocations(), $record?->node_id ?? (int) $get('mc_router_node_id'), $record?->id))
-                ->mapWithKeys(fn ($a) => [$a['id'] => AllocationSelector::backend($a)]))
-            ->required(fn (Get $get) => $creating && $get('mc_router_enabled'))
-            ->afterStateUpdated(function ($state, Set $set) use ($creating) {
-                $set('mc_router_confirmed_allocation', null);
-                if ($creating) {
-                    $set('allocation_id', $state);
-                    $set('allocation_additional', null);
-                }
-            });
+                ->default(function (?Server $record) {
+                    if (!$record) { return null; }
+                    $route = self::record($record);
+                    $preferred = $route?->enabled ? ($route->desired_allocation_id ?? $record->allocation_id) : $record->allocation_id;
+
+                    return collect(self::selector()->options(self::allocations(), $record->node_id, $record->id))->firstWhere('id', $preferred)['id'] ?? null;
+                })
+                ->options(fn (Get $get, ?Server $record) => collect(self::selector()->options(self::allocations(), $record?->node_id ?? (int) $get('node_id'), $record?->id))
+                    ->mapWithKeys(fn (array $a) => [$a['id'] => AllocationSelector::backend($a)]))
+                ->required(fn (Get $get) => $creating && $get('mc_router_enabled'))
+                ->afterStateUpdated(function ($state, Set $set) use ($creating) {
+                    $set('mc_router_confirmed_allocation', null);
+                    if ($creating) {
+                        $set('allocation_id', $state);
+                        $set('allocation_additional', null);
+                    }
+                }),
+        ];
         if (!$creating) {
             $fields[] = Actions::make([
-                Action::make('mc_router_select_replacement')->label('Automatically select eligible replacement')
+                Action::make('mc_router_select_replacement')->label('Automatically select eligible replacement')->color('gray')
+                    ->icon(TablerIcon::Wand)
                     ->visible(fn (Get $get) => $get('mc_router_enabled') && !$get('mc_router_allocation_id'))
                     ->requiresConfirmation()->modalHeading('Replace the current primary allocation?')
-                    ->modalDescription('The current primary is not eligible. Select a free eligible primary on this node. Saving in live mode will change the server port; dry-run mode only stores a proposal.')
+                    ->modalDescription('The current primary is not eligible. A free eligible primary on this node will be selected. Saving in live mode will change the server port; dry-run mode only stores a proposal.')
                     ->action(function (Set $set, Server $record) {
                         $chosen = self::selector()->choose(self::allocations(), $record->node_id, $record->id, $record->allocation_id);
                         $set('mc_router_allocation_id', $chosen['id']);
                         $set('mc_router_confirmed_allocation', $chosen['id']);
                     }),
-                Action::make('mc_router_confirm_change')->label('Confirm this primary allocation change')
+                Action::make('mc_router_confirm_change')->label('Confirm this primary allocation change')->color('warning')
+                    ->icon(TablerIcon::ArrowsExchange)
                     ->visible(fn (Get $get, Server $record) => $get('mc_router_enabled') && $get('mc_router_allocation_id')
                         && (int) $get('mc_router_allocation_id') !== $record->allocation_id
                         && (int) $get('mc_router_confirmed_allocation') !== (int) $get('mc_router_allocation_id'))
@@ -161,30 +200,16 @@ final class RoutingFields
                     ->modalDescription(fn (Get $get, Server $record) => 'Current: ' . $record->allocation?->address . '. Proposed: ' . Allocation::find($get('mc_router_allocation_id'))?->address . '. Saving in live mode changes the server port.')
                     ->action(fn (Get $get, Set $set) => $set('mc_router_confirmed_allocation', $get('mc_router_allocation_id'))),
                 Action::make('mc_router_save')->label('Save MC Router settings')->color('primary')
+                    ->icon(TablerIcon::DeviceFloppy)
                     ->action(function (Get $get, Server $record) {
                         abort_unless(user()?->isRootAdmin(), 403);
                         app(RouteManager::class)->save($record, (bool) $get('mc_router_enabled'), (string) $get('mc_router_slug'),
                             (int) $get('mc_router_allocation_id'), (int) $get('mc_router_confirmed_allocation'));
                         Notification::make()->title('MC Router settings saved')->success()->send();
                     }),
-            ])->key('mc-router-actions');
+            ])->key('mc-router-actions')->columnSpanFull();
         }
-        $fields[] = Text::make(function (Get $get, ?Server $record) use ($creating) {
-            if (!$get('mc_router_enabled')) { return 'mc-router is disabled. Normal Pelican allocation behavior is unchanged.'; }
-            try {
-                $hostname = Hostname::make((string) $get('mc_router_slug'), app(Settings::class)->get()['suffix'], config('mc-router.reserved', []));
-                $allocation = Allocation::find($get('mc_router_allocation_id'));
-                $route = self::record($record);
-                $status = $route ? " Stored status: {$route->status}. " . ($route->last_error ?? '') : '';
-                $hint = !$allocation ? ' No eligible primary selected; approve automatic replacement or choose one.' : '';
-                if ($creating && (int) $get('allocation_id') !== (int) $get('mc_router_allocation_id')) {
-                    $hint = ' The Information step’s primary differs. Return here to choose the final eligible primary; creation will reject mismatched choices.';
-                }
-                return 'Join address: ' . $hostname . ' (public TCP 25565).' . $hint . $status;
-            } catch (\InvalidArgumentException $e) {
-                return $e->getMessage();
-            }
-        })->columnSpanFull();
+        $fields[] = Text::make(fn (Get $get, ?Server $record) => self::previewText($get, $record, $creating))->columnSpanFull();
 
         return $fields;
     }

@@ -92,8 +92,10 @@ final class Synchronizer
                     unset($attempted[$route->hostname]);
                     $route->update(['applied' => $applied, 'attempted' => $attempted, 'status' => 'active', 'last_error' => null]);
                     $this->release($route, $route->hostname);
+                    $this->syncAlias($route, $server, $route->hostname);
                 } else {
                     $this->release($route, null);
+                    $this->syncAlias($route, $server, null);
                     if (!$server) { $route->delete(); }
                     else { $route->update(['status' => 'disabled', 'last_error' => null]); }
                 }
@@ -114,5 +116,22 @@ final class Synchronizer
         if ($keep !== null) { $retained[] = $keep; }
         if ($retained) { $query->whereNotIn('hostname', $retained); }
         $query->delete();
+    }
+
+    /** Show the join hostname wherever the panel displays the allocation address (alias is display-only). */
+    private function syncAlias(RouteRecord $route, ?Server $server, ?string $hostname): void
+    {
+        $allocation = $server?->allocation ?? (isset($route->desired_allocation_id) ? \App\Models\Allocation::find($route->desired_allocation_id) : null);
+        if (!$allocation) { return; }
+        $overwritable = [null, $route->hostname, ...array_keys($route->applied), ...array_keys($route->attempted ?? [])];
+        if ($hostname !== null) {
+            if ($allocation->ip_alias === $hostname) { return; }
+            if (in_array($allocation->ip_alias, $overwritable, true)) { $allocation->update(['ip_alias' => $hostname]); }
+
+            return;
+        }
+        if ($allocation->ip_alias !== null && in_array($allocation->ip_alias, $overwritable, true)) {
+            $allocation->update(['ip_alias' => null]);
+        }
     }
 }

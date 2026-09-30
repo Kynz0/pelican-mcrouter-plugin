@@ -15,11 +15,12 @@ resetting, provide a private password-setup link, not a weak public admin passwo
 
 Try:
 
-1. **Admin → Servers → Create → MC Router**: enable Use mc-router. The Primary
-   allocation is already selected; choose another eligible one if desired.
-   Continue to Information to enter the normal server name; its next state update
-   suggests the slug unless you edited it. The selection is mirrored between
-   steps. Do not submit expecting a game server: the demo has no real Wings.
+1. **Admin → Servers → Create → MC Router**: the step is **egg-gated** — set the
+   "Offer routing for these eggs only" list in the plugin settings first, then it
+   appears in the wizard after you select one of those eggs (demo ships ungated).
+   The Primary allocation is already selected; choose another eligible one if
+   desired. The selection is mirrored between steps. Do not submit expecting a
+   game server: the demo has no real Wings.
 2. **Admin → Servers → Edit → MC Router**: enable routing on Eligible existing
    server to keep its port. On Ineligible existing server, approve automatic
    replacement in the modal. Save with **Save MC Router settings** inside the tab.

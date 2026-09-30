@@ -24,8 +24,8 @@ try {
         ->assertSee('MC Router')
         ->assertSet('data.mc_router_enabled', false)
         ->set('data.allocation_id', $free->id)
-        ->set('data.mc_router_enabled', true)
-        ->assertSet('data.allocation_id', $free->id)
+        ->set('data.mc_router_enabled', true);
+    $wizard->assertSet('data.allocation_id', $free->id)
         ->assertSet('data.mc_router_allocation_id', $free->id)
         ->assertSee('Primary allocation')
         ->assertDontSee('Optional allocation override')
@@ -37,7 +37,8 @@ try {
         ->set('data.mc_router_allocation_id', $other->id);
     $wizard->assertSet('data.allocation_id', $other->id)
         ->set('data.allocation_id', $free->id)->assertSet('data.mc_router_allocation_id', $free->id)
-        ->set('data.mc_router_enabled', false)->assertSet('data.allocation_id', $free->id)
+        ->set('data.mc_router_enabled', false);
+    $wizard->assertSet('data.allocation_id', $free->id)
         ->set('data.mc_router_enabled', true)->set('data.mc_router_allocation_id', $other->id);
     $state = ['data' => $wizard->instance()->data];
     $wizard->instance()->form->dehydrateState($state);
@@ -47,8 +48,8 @@ try {
     $server = App\Models\Server::factory()->create(['node_id' => $node->id, 'allocation_id' => $other->id]);
     $other->update(['server_id' => $server->id]);
     $edit = Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\EditServer::class, ['record' => $server->id])
-        ->assertSee('MC Router')
-        ->set('data.mc_router_enabled', true)
+        ->assertSee('MC Router');
+    $edit->set('data.mc_router_enabled', true)
         ->assertSet('data.mc_router_allocation_id', $other->id)
         ->assertDontSee('I would allow');
     $edit->set('data.mc_router_allocation_id', $free->id)->assertSee('Confirm this primary allocation change');
@@ -63,8 +64,9 @@ try {
     $edit->callAction($schemaAction($edit, 'mc_router_confirm_change'))
         ->assertSet('data.mc_router_confirmed_allocation', $free->id)
         ->callAction($schemaAction($edit, 'mc_router_save'));
-    if (Kynzo\McRouter\Models\RouteRecord::where('server_uuid', $server->uuid)->value('status') !== 'dry-run') {
-        throw new RuntimeException('The actual edit-tab save action did not persist dry-run settings.');
+    $savedStatus = Kynzo\McRouter\Models\RouteRecord::where('server_uuid', $server->uuid)->value('status');
+    if ($savedStatus !== 'dry-run') {
+        throw new RuntimeException('The actual edit-tab save action did not persist dry-run settings (status: ' . var_export($savedStatus, true) . ').');
     }
     if ($server->refresh()->allocation_id !== $other->id || $free->refresh()->server_id !== null) { throw new RuntimeException('Unsaved preview mutated an allocation.'); }
     config(['mc-router.pools' => [$node->id => [$free->id]]]);
@@ -90,6 +92,24 @@ try {
     $settingsPage->mountAction(Filament\Actions\Testing\TestAction::make('exclude_settings')->table('mc-router'))
         ->set('mountedActions.0.data.suffix', 'bad..example.org')->callMountedAction()->assertHasFormErrors(['suffix']);
     if (app(Kynzo\McRouter\Services\Settings::class)->get()['suffix'] !== 'saved.example.org') { throw new RuntimeException('Invalid settings were saved.'); }
+    $mcEgg = App\Models\Egg::factory()->create(['name' => 'Fabric']);
+    $otherEgg = App\Models\Egg::factory()->create(['name' => 'Rust']);
+    $values = app(Kynzo\McRouter\Services\Settings::class)->get();
+    $values['eggs'] = [$mcEgg->id];
+    app(Kynzo\McRouter\Services\Settings::class)->save($values);
+    // The step label only appears in the stepper once a gated egg is selected.
+    Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\CreateServer::class)
+        ->assertDontSee('MC Router')
+        ->set('data.egg_id', $otherEgg->id)->assertDontSee('MC Router')
+        ->set('data.egg_id', $mcEgg->id)->assertSee('MC Router');
+    try {
+        app(App\Services\Servers\ServerCreationService::class)->handle(['name' => 'Gated', 'node_id' => $node->id, 'owner_id' => $admin->id,
+            'egg_id' => 999999, 'allocation_id' => $other->id, 'memory' => 128, 'swap' => 0, 'disk' => 128, 'cpu' => 0, 'io' => 500,
+            'environment' => [], 'mc_router_enabled' => true, 'mc_router_slug' => 'gated', 'mc_router_allocation_id' => $other->id]);
+        throw new RuntimeException('Gated creation unexpectedly completed.');
+    } catch (Illuminate\Database\Eloquent\ModelNotFoundException) {
+        if (Kynzo\McRouter\Models\RouteRecord::where('hostname', 'like', 'gated%')->exists()) { throw new RuntimeException('Gated egg was routed anyway.'); }
+    }
     $ordinary = App\Models\User::factory()->create();
     Illuminate\Support\Facades\Auth::login($ordinary);
     Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\CreateServer::class)->assertForbidden();
@@ -99,7 +119,7 @@ try {
     } catch (Symfony\Component\HttpKernel\Exception\HttpException $e) {
         if ($e->getStatusCode() !== 403) { throw $e; }
     }
-    echo "OK: native creation step/edit tab, actual populated primary selector, slug hydration, specific confirmation, read-only unsaved fields, persisted settings, non-admin denial\n";
+    echo "OK: native creation step/edit tab, actual populated primary selector, slug hydration, specific confirmation, read-only unsaved fields, persisted settings, egg-gated step visibility, gated-egg creation bypass, non-admin denial\n";
 } catch (PHPUnit\Framework\ExpectationFailedException $e) {
     echo $e->getComparisonFailure()?->getDiff();
     throw $e;

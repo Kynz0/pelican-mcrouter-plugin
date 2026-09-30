@@ -44,10 +44,9 @@ final class McRouterProvider extends ServiceProvider
                         $eligible = collect(\Kynzo\McRouter\Filament\RoutingFields::selector()->options(\Kynzo\McRouter\Filament\RoutingFields::allocations(), (int) ($component->data['node_id'] ?? 0)))->firstWhere('id', (int) $value);
                         if ($eligible) { $component->data['mc_router_allocation_id'] = (int) $value; }
                     }
-                    if (in_array($path, ['data.node_id', 'data.mc_router_node_id'], true)) {
-                        $component->data['node_id'] = $component->data['mc_router_node_id'] = $value;
+                    if ($path === 'data.node_id') {
                         $component->node = \App\Models\Node::find($value);
-                        $chosen = \Kynzo\McRouter\Filament\RoutingFields::selector()->options(\Kynzo\McRouter\Filament\RoutingFields::allocations(), (int) $value)[0] ?? null;
+                        $chosen = \Kynzo\McRouter\Filament\RoutingFields::autoAllocation((int) $value, \Kynzo\McRouter\Filament\RoutingFields::allocations());
                         $component->data['allocation_id'] = $component->data['mc_router_allocation_id'] = $chosen['id'] ?? null;
                         $component->data['allocation_additional'] = null;
                     }

@@ -5,14 +5,14 @@ namespace Kynzo\McRouter;
 
 use App\Contracts\Plugins\HasPluginSettings;
 use App\Enums\StepPosition;
+use App\Enums\TablerIcon;
 use App\Enums\TabPosition;
 use App\Filament\Admin\Resources\Servers\Pages\CreateServer;
 use App\Filament\Admin\Resources\Servers\Pages\EditServer;
 use Filament\Contracts\Plugin;
 use Filament\Notifications\Notification;
 use Filament\Panel;
-use Kynzo\McRouter\Filament\RoutingTab as Tab;
-use Kynzo\McRouter\Filament\RoutingStep as Step;
+use Filament\Schemas\Components\Utilities\Get;
 use Illuminate\Validation\ValidationException;
 use Kynzo\McRouter\Filament\RoutingFields;
 use Kynzo\McRouter\Filament\SettingsForm;
@@ -25,10 +25,26 @@ final class McRouterPlugin implements Plugin, HasPluginSettings
     public function register(Panel $panel): void
     {
         if ($panel->getId() !== 'admin') { return; }
-        CreateServer::registerCustomSteps(StepPosition::Before,
-            Step::make('MC Router')->visible(fn () => user()?->isRootAdmin() ?? false)->schema(fn () => RoutingFields::fields(true)));
+        // beta38 only supports whole steps before/after the built-in ones, so the
+        // step runs after Egg Configuration. Egg gating keeps it Minecraft-only.
+        CreateServer::registerCustomSteps(StepPosition::After,
+            \Kynzo\McRouter\Filament\RoutingStep::make('MC Router')
+                ->label('MC Router')->icon(TablerIcon::Router)->completedIcon(TablerIcon::Check)
+                ->visible(function (Get $get) {
+                    if (!(user()?->isRootAdmin() ?? false)) { return false; }
+                    $eggs = array_map('intval', app(Settings::class)->get()['eggs'] ?? []);
+                    if (!$eggs) { return true; }
+                    $eggId = (int) $get('egg_id');
+
+                    return $eggId !== 0 && in_array($eggId, $eggs, true);
+                })
+                ->schema(fn () => RoutingFields::fields(true)));
         EditServer::registerCustomTabs(TabPosition::After,
-            Tab::make('mc-router')->label('MC Router')->visible(fn () => user()?->isRootAdmin() ?? false)->schema(fn () => RoutingFields::fields(false)));
+            \Kynzo\McRouter\Filament\RoutingTab::make('mc-router')->label('MC Router')
+                ->icon(TablerIcon::Router)
+                ->visible(fn () => user()?->isRootAdmin() ?? false)
+                ->columns(['default' => 1, 'sm' => 2])
+                ->schema(fn () => RoutingFields::fields(false)));
     }
 
     public function boot(Panel $panel): void {}
@@ -46,6 +62,7 @@ final class McRouterPlugin implements Plugin, HasPluginSettings
     public function getSettingsForm(): array
     {
         abort_unless(user()?->isRootAdmin(), 403);
+
         return SettingsForm::fields();
     }
 
