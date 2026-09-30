@@ -29,7 +29,20 @@ final class RouteManager
         if (!$a || !$selector->eligible($a->toArray(), $nodeId) || ($a->server_id !== null && $a->server_id !== $serverId)) {
             throw ValidationException::withMessages(['mc_router_allocation_id' => 'The primary allocation is not eligible or available. Please choose again.']);
         }
+        try { AllocationSelector::backend($a->toArray()); }
+        catch (\InvalidArgumentException $e) { throw ValidationException::withMessages(['mc_router_allocation_id' => $e->getMessage()]); }
         return $a;
+    }
+
+    public function guardBackend(Allocation $allocation, string $serverUuid): void
+    {
+        try { $backend = AllocationSelector::backend($allocation->toArray()); }
+        catch (\InvalidArgumentException) { return; } // Non-router wildcard allocations retain normal Panel behavior.
+        foreach (RouteRecord::where('server_uuid', '!=', $serverUuid)->get() as $route) {
+            if (in_array($backend, [...array_values($route->applied), ...array_values($route->attempted ?? [])], true)) {
+                throw ValidationException::withMessages(['mc_router_allocation_id' => 'This backend is still claimed by a previous route. Reconcile its removal before reusing the port.']);
+            }
+        }
     }
 
     public function reserve(RouteRecord $route, string $hostname): void
@@ -55,7 +68,7 @@ final class RouteManager
             }
             $hostname = $enabled ? $this->hostname($slug) : null;
             $route = DB::transaction(function () use ($server, $enabled, $hostname, $allocationId) {
-                if ($enabled) { $this->allocation($allocationId, $server->node_id, $server->id); }
+                if ($enabled) { $this->guardBackend($this->allocation($allocationId, $server->node_id, $server->id), $server->uuid); }
                 $route = RouteRecord::firstOrNew(['server_uuid' => $server->uuid]);
                 if (!$enabled && !$route->exists) { return null; }
                 $route->fill([

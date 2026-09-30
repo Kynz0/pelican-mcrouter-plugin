@@ -49,6 +49,12 @@ final class McRouterProvider extends ServiceProvider
         });
         Server::creating(fn (Server $server) => $this->app->make(CreationCapture::class)->creating($server));
         Server::created(fn (Server $server) => $this->app->make(CreationCapture::class)->created($server));
+        Server::updating(function (Server $server) {
+            if ($server->isDirty('allocation_id') && $server->allocation_id) {
+                $a = \App\Models\Allocation::find($server->allocation_id);
+                if ($a) { $this->app->make(\Kynzo\McRouter\Services\RouteManager::class)->guardBackend($a, $server->uuid); }
+            }
+        });
         Server::updated(function (Server $server) {
             if (!$server->wasChanged(['allocation_id', 'node_id'])) { return; }
             $route = RouteRecord::where('server_uuid', $server->uuid)->first();

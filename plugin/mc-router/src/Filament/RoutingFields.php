@@ -31,8 +31,20 @@ final class RoutingFields
 
     public static function allocations(): array
     {
-        return Allocation::whereIn('node_id', array_keys(app(Settings::class)->get()['pools']))
+        $allocations = Allocation::whereIn('node_id', array_keys(app(Settings::class)->get()['pools']))
             ->get(['id', 'node_id', 'server_id', 'ip', 'port'])->toArray();
+        $owners = Server::whereIn('id', array_filter(array_column($allocations, 'server_id')))->pluck('uuid', 'id');
+        $claims = [];
+        foreach (RouteRecord::get() as $route) {
+            foreach ([...array_values($route->applied), ...array_values($route->attempted ?? [])] as $backend) { $claims[$backend][] = $route->server_uuid; }
+        }
+        return array_values(array_filter($allocations, function ($a) use ($claims, $owners) {
+            $owner = $owners[$a['server_id']] ?? null;
+            try { $backend = AllocationSelector::backend($a); }
+            catch (\InvalidArgumentException) { return false; }
+            foreach ($claims[$backend] ?? [] as $claimOwner) { if ($owner !== $claimOwner) { return false; } }
+            return true;
+        }));
     }
 
     public static function selector(): AllocationSelector

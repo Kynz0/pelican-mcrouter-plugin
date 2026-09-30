@@ -45,6 +45,10 @@ final class Settings
             if (!is_array($ids) || Allocation::where('node_id', $nodeId)->whereIn('id', $ids)->count() !== count(array_unique($ids))) {
                 throw ValidationException::withMessages(['pool_rows' => 'Every approved allocation must belong to its configured node.']);
             }
+            foreach (Allocation::whereIn('id', $ids)->get() as $allocation) {
+                try { \Kynzo\McRouter\Domain\AllocationSelector::backend($allocation->toArray()); }
+                catch (\InvalidArgumentException $e) { throw ValidationException::withMessages(['pool_rows' => $e->getMessage()]); }
+            }
         }
         foreach (['local_port', 'ssh_port', 'ssh_api_port'] as $key) {
             if (!filter_var($values[$key], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]])) {

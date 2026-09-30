@@ -43,7 +43,10 @@ final class Synchronizer
                         $invalid = 'Current primary allocation is not owned and eligible. Approve an eligible replacement in the MC Router tab.';
                     } elseif ($route->desired_allocation_id !== $server->allocation_id) {
                         $invalid = 'The proposed primary differs from the actual primary. Save routing again to confirm the allocation change.';
-                    } else { $backend = AllocationSelector::backend($a->toArray()); }
+                    } else {
+                        try { $backend = AllocationSelector::backend($a->toArray()); }
+                        catch (\InvalidArgumentException) { $invalid = 'The current allocation does not have a valid unicast Wings backend address.'; }
+                    }
                 }
                 $client = app(RouterClient::class);
                 $observed = $client->routes();

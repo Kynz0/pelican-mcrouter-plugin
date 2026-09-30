@@ -61,6 +61,9 @@ same('192.0.2.1:25566', AllocationSelector::backend($allocations[0]));
 same('[2001:db8::1]:25565', AllocationSelector::backend(['ip' => '2001:db8::1', 'port' => 25565]));
 rejects(fn () => AllocationSelector::backend(['ip' => 'example.com', 'port' => 25565]));
 rejects(fn () => AllocationSelector::backend(['ip' => '192.0.2.1', 'port' => 0]));
+foreach (['0.0.0.0', '::', '224.0.0.1', 'ff02::1'] as $badBackend) {
+    rejects(fn () => AllocationSelector::backend(['ip' => $badBackend, 'port' => 25565]));
+}
 $hostname = 'test.mc.example.org';
 $routes = [$hostname => ['backend' => '192.0.2.1:25565'], 'manual.example.org' => ['backend' => '192.0.2.1:25566']];
 same('apply', RoutePlanner::apply($hostname, '192.0.2.1:25565', [], null)['action']);

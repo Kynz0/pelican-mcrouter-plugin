@@ -14,6 +14,10 @@ final class CreationCapture
 
     public function creating(Server $server): void
     {
+        if ($server->allocation_id) {
+            $a = \App\Models\Allocation::whereKey($server->allocation_id)->lockForUpdate()->first();
+            if ($a) { app(RouteManager::class)->guardBackend($a, $server->uuid); }
+        }
         if ($this->desired === null) { return; }
         if ($server->allocation_id !== $this->desired['allocation_id'] || $server->node_id !== $this->desired['node_id']) {
             throw ValidationException::withMessages(['mc_router_allocation_id' => 'The final primary/node selection does not match the MC Router step.']);

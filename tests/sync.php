@@ -122,9 +122,13 @@ try {
     $another->update(['server_id' => $otherServer->id]);
     invalid(fn () => $manager->save($otherServer, true, 'FINAL', $another->id, 0));
     $server->delete();
+    $free->update(['server_id' => null]);
+    check(!collect(Kynzo\McRouter\Filament\RoutingFields::allocations())->contains('id', $free->id), 'Unremoved old route backend was offered for reuse.');
+    invalid(fn () => App\Models\Server::factory()->create(['owner_id' => $admin->id, 'node_id' => $node->id, 'allocation_id' => $free->id]));
     check($sync->sync($route->id), 'Deletion cleanup failed.');
     check(RouteRecord::find($route->id) === null, 'Deleted-server ledger remains.');
     check(!isset($client->routes()['final.mc.example.org']), 'Deleted-server route remains.');
+    check(collect(Kynzo\McRouter\Filament\RoutingFields::allocations())->contains('id', $free->id), 'Cleaned backend did not become available again.');
     check(count($client->routes()) === 1 && isset($client->routes()['manual.example.org']), 'Unrelated route preservation failed.');
     echo "OK: $checks real-router lifecycle checks (apply/readback, rename, core allocation follow, drift repair, uncertain retries, conflicts, opt-out, re-enable, uniqueness, deletion)\n";
 } finally { DB::rollBack(); Mockery::close(); }

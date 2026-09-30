@@ -57,6 +57,13 @@ final class AllocationSelector
             throw new InvalidArgumentException('Allocation has an invalid backend address.');
         }
 
+        $bytes = inet_pton($ip);
+        if (strspn($bytes, "\0") === strlen($bytes)
+            || (strlen($bytes) === 4 && ord($bytes[0]) >= 224)
+            || (strlen($bytes) === 16 && ord($bytes[0]) === 255)) {
+            throw new InvalidArgumentException('Use a real unicast Wings address, not a wildcard, multicast or reserved backend address.');
+        }
+
         return (str_contains($ip, ':') ? "[$ip]" : $ip) . ":$port";
     }
 }
