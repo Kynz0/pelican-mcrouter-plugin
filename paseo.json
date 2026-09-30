@@ -1,0 +1,1 @@
+{"scripts": {"docs": {"command": "nix develop -c python3 scripts/serve_docs.py -- --port $PASEO_PORT", "port": 8081, "type": "service"}}, "worktree": {"setup": "nix develop -c true"}}
