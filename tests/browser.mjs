@@ -24,12 +24,10 @@ try {
     await page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 30000 });
     stage = 'creation controls';
     await page.goto(`${origin}/admin/servers/create`, { waitUntil: 'networkidle' });
-    await page.screenshot({ path: path.join(root, '.dev/wizard-before.png'), fullPage: true });
-    await page.getByRole('switch').first().click();
-    await page.waitForTimeout(1500);
-    await page.screenshot({ path: path.join(root, '.dev/wizard-after-toggle.png'), fullPage: true });
-    await page.getByText('Primary allocation', { exact: false }).first().waitFor();
-    await page.screenshot({ path: path.join(root, '.dev/wizard.png'), fullPage: true });
+    const wizardSteps = [...(await page.content()).matchAll(/fi-sc-wizard-header-step-label">([^<]+)</g)].map((m) => m[1]);
+    if (wizardSteps.at(-1) !== 'MC Router') {
+        throw new Error(`MC Router is not the final creation step: ${wizardSteps.join(', ')}`);
+    }
     stage = 'edit tab';
     await page.goto(`${origin}/admin/servers/1/edit?tab=mc-router%3A%3Adata%3A%3Atab`, { waitUntil: 'networkidle' });
     await page.getByRole('tab', { name: 'MC Router', exact: true }).click();
