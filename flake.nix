@@ -1,49 +1,30 @@
 {
-  description = "Pelican × mc-router integration plugin — docs and plugin development environment";
-
+  description = "Pelican mc-router plugin development and disposable compatibility harness";
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-
-  outputs =
-    { self, nixpkgs }:
+  outputs = { self, nixpkgs }:
     let
-      supportedSystems = [
-        "x86_64-linux"
-        "aarch64-darwin"
-      ];
-      forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-      nixpkgsFor = forAllSystems (system: import nixpkgs { inherit system; });
-    in
-    {
-      devShells = forAllSystems (
-        system:
-        let
-          pkgs = nixpkgs.legacyPackages.${system};
-        in
-        {
+      systems = [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
+      eachSystem = nixpkgs.lib.genAttrs systems;
+    in {
+      devShells = eachSystem (system:
+        let pkgs = nixpkgs.legacyPackages.${system}; in {
           default = pkgs.mkShell {
-            packages = with pkgs; [
-              python3 # docs checker + tooling
-              git
-            ];
+            packages = with pkgs; [ php84 php84Packages.composer python3 git curl unzip zip go nodejs yarn ];
           };
-        }
-      );
-
-      apps = forAllSystems (
-        system:
+        });
+      apps = eachSystem (system:
         let
           pkgs = nixpkgs.legacyPackages.${system};
-          test = pkgs.writeShellScriptBin "test" ''
-            set -euo pipefail
-            python3 "$1"
-          '';
-        in
-        {
-          test = {
+          runner = name: script: {
             type = "app";
-            program = "${test}/bin/test";
+            program = "${pkgs.writeShellScriptBin name ''
+              export PATH=${pkgs.lib.makeBinPath [ pkgs.php84 pkgs.python3 pkgs.git pkgs.curl pkgs.zip ]}:$PATH
+              exec bash ${self}/scripts/${script} "$@"
+            ''}/bin/${name}";
           };
-        }
-      );
+        in {
+          test = runner "test" "test.sh";
+          dev = runner "dev" "dev.sh";
+        });
     };
 }

@@ -6,7 +6,9 @@ Local first, live later. Nothing here runs against production until the user aut
 
 - `nix develop -c true` succeeds (store warm).
 - `nix develop -c python3 scripts/check_docs.py` passes (docs skeleton, links, references).
-- `nix develop -c .#test` runs the same checker.
+- `nix run .#test` runs syntax, documentation, domain and archive checks.
+- `nix develop -c php tests/panel.php` tests the disposable beta38 Livewire prototype.
+- `nix develop -c python3 tests/router_api.py` tests a finite disposable router process; see [spike findings](spike-findings.md).
 - Paseo `docs` service serves the repo on `$PASEO_PORT`; `curl -sS -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$PORT/docs/README.md"` returns 200.
 
 ## 1. Plugin spike (disposable, no live writes)

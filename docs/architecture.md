@@ -1,5 +1,7 @@
 # Proposed architecture — validate in a spike
 
+**Historical proposal:** [spike findings](spike-findings.md) supersede the companion-helper assumption. The user prefers plugin + mc-router only. Secure transport to the native REST API, durable ownership and reconciliation are the current direction, not yet a live implementation.
+
 ```text
 Admin Create wizard (toggle + suggested slug)
         │ validate node, slug, eligibility and capacity

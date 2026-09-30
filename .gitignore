@@ -1,0 +1,6 @@
+/.dev/
+/dist/
+/vendor/
+/.env
+/result
+__pycache__/
