@@ -32,6 +32,8 @@ try {
     await page.goto(`${origin}/admin/servers/1/edit?tab=mc-router%3A%3Adata%3A%3Atab`, { waitUntil: 'networkidle' });
     await page.getByRole('tab', { name: 'MC Router', exact: true }).click();
     await page.getByRole('switch').first().waitFor();
+    await page.getByRole('switch').first().click();
+    await page.waitForTimeout(1200);
     await page.screenshot({ path: path.join(root, '.dev/edit-tab.png'), fullPage: true });
     stage = 'plugin settings';
     await page.goto(`${origin}/admin/plugins`, { waitUntil: 'networkidle' });
