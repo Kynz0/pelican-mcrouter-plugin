@@ -1,9 +1,34 @@
-# Pelican × mc-router integration
+# Pelican × mc-router
 
-Planning workspace for an **admin-only Pelican plugin** that gives a newly created Minecraft server a public `slug.mc.kynzo.org` address through the existing mc-router CT. No plugin code has been written or installed yet.
+Reusable, **admin-only**, **AGPL-3.0-or-later** plugin for Minecraft Java hostname
+routing. Initially targets **Pelican Panel v1.0.0-beta38** and **mc-router v1.47.1**.
+Domains, nodes and eligible allocations are configurable, not tailored to one network.
 
-Start with [docs/README.md](docs/README.md). The handoff is [docs/agent-handoff.md](docs/agent-handoff.md). The production inventory here is observational and must be rechecked; this repository contains no credentials or deployment configuration.
+**Current: 0.2.0-dev experimental alpha.** Native server-creation wizard step,
+admin server-edit tab, automatically populated primary selector, specific
+replacement confirmation, plugin settings and queued native-API synchronization.
+Dry-run is the default; the public demo is forced dry-run. No live services have
+been modified and no production installation is approved.
 
-The requested flow: Admin → Servers → Create, `Use mc-router` toggle (off by default), editable suggested slug and preview. If enabled, choose a free **primary** allocation from an approved router pool on the selected Wings node; register `slug.mc.kynzo.org` → its private IP:port. Game clients still connect on public TCP 25565. Extra mod/voice ports are independent and out of scope for v1.
+- [Try the alpha / installation instructions](docs/prototype.md)
+- [Milestone 2 findings and remaining gates](docs/milestone2.md)
+- [Next-session handoff (live integration)](docs/handoff-live.md)
+- [Original compatibility spike](docs/spike-findings.md)
+- [Implementation checklist](TODO.md)
+- [Documentation map](docs/README.md)
 
-Run `nix develop -c python3 scripts/check_docs.py` to validate the documentation skeleton. A docs-only preview is available through the Paseo `docs` service; no production services are started here.
+```sh
+nix run .#test
+nix develop -c bash scripts/setup-panel.sh
+nix develop -c bash scripts/setup-router.sh
+nix develop -c bash scripts/integration.sh
+nix develop -c python3 scripts/package.py
+```
+
+Start the disposable Panel with `paseo script start dev --cwd "$PWD"`.
+Optional browser checks use `nix develop .#browser -c bash scripts/browser-smoke.sh`.
+
+Nix is development tooling, not a plugin runtime requirement. Live transport uses
+OpenSSH restricted forwarding to mc-router's loopback API, without a custom
+companion service. It requires a trusted Panel and correctly restricted/pinned
+SSH access; see the documented trust and persistence limitations before deployment.

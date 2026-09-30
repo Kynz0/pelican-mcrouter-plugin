@@ -27,7 +27,9 @@ def main() -> int:
         return 1
 
     failures: list[str] = []
-    md_files = sorted(p for p in root.rglob('*.md') if p.is_file())
+    excluded = {'.git', '.dev', 'vendor', 'dist', 'node_modules'}
+    md_files = sorted(p for p in root.rglob('*.md') if p.is_file()
+                      and not excluded.intersection(p.relative_to(root).parts))
     link_pattern = re.compile(r'\[[^\]]+\]\(([^)#\s]+)(?:#[^)]*)?\)')
 
     for md in md_files:

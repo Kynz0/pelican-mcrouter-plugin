@@ -1,1 +1,10 @@
-{"scripts": {"docs": {"command": "nix develop -c python3 scripts/serve_docs.py --port $PASEO_PORT", "port": 8081, "type": "service"}}, "worktree": {"setup": "nix develop -c true"}}
+{
+  "worktree": { "setup": "nix develop -c true" },
+  "scripts": {
+    "dev": { "command": "nix develop -c bash scripts/dev.sh", "type": "service" },
+    "docs": { "command": "nix develop -c python3 scripts/serve_docs.py --port $PASEO_PORT", "type": "service" },
+    "test": { "command": "nix run .#test" },
+    "lint": { "command": "nix develop -c bash scripts/lint.sh" },
+    "integration": { "command": "nix develop -c bash scripts/integration.sh" }
+  }
+}

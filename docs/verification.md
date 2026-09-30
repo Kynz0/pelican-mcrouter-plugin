@@ -1,12 +1,14 @@
 # Verification plan
 
-Local first, live later. Nothing here runs against production until the user authorizes that specific step. "Verified" claims must cite the command/output that proved them.
+Local first, live later. Nothing here runs against production until the user authorizes that specific step. "Verified" claims must cite the command/output that proved them. [Milestone 2](milestone2.md) contains current evidence; older helper/file-update criteria below are historical proposals, not claims about the native API.
 
 ## 0. Workspace checks (run now, keep green)
 
 - `nix develop -c true` succeeds (store warm).
 - `nix develop -c python3 scripts/check_docs.py` passes (docs skeleton, links, references).
-- `nix develop -c .#test` runs the same checker.
+- `nix run .#test` runs syntax, documentation, domain and archive checks.
+- `nix develop -c bash scripts/integration.sh` exercises ZIP import, native beta38 wizard/tab/settings, core creation with mocked Wings, real disposable router lifecycle and restricted SSH transport.
+- `nix develop .#browser -c bash scripts/browser-smoke.sh` optionally verifies the public disposable preview in Chromium with a separate temporary account.
 - Paseo `docs` service serves the repo on `$PASEO_PORT`; `curl -sS -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:$PORT/docs/README.md"` returns 200.
 
 ## 1. Plugin spike (disposable, no live writes)
