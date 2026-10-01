@@ -16,7 +16,7 @@ that downloads the ZIP and runs the standard import path (id check, atomic
 swap, migrations, composer packages).
 
 Steps (release.py):
-  1. precheck: clean tree, expected commit identity, version format,
+  1. precheck: clean tree, configured commit identity, version format,
      unused tag, remote reachable
   2. build the importable ZIP via scripts/package.py
   3. regenerate update.json for the new version; commit it on the current
@@ -42,7 +42,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REPO_SLUG = 'kynzo/pelican-mcrouter-plugin'
 FORGEJO_URL = f'https://git.kynzo.org/{REPO_SLUG}'
-EXPECTED_IDENTITY = 'kynzo <kynzo@users.noreply.git.kynzo.org>'
 MANIFEST = ROOT / 'plugin' / 'mc-router' / 'plugin.json'
 UPDATE_JSON = ROOT / 'update.json'
 
@@ -102,12 +101,18 @@ def main() -> int:
         else:
             print('FAIL: worktree is dirty; commit or stash first:\n' + dirty)
             return 1
-    ident = git('var', 'GIT_AUTHOR_IDENT').split('>', 1)[0] + '>'
-    committer_ident = git('var', 'GIT_COMMITTER_IDENT').split('>', 1)[0] + '>'
-    for what, value in (('author', ident), ('committer', committer_ident)):
-        if value != EXPECTED_IDENTITY:
-            print(f'FAIL: git {what} identity is {value}, expected {EXPECTED_IDENTITY}')
+    idents = {}
+    for what, var in (('author', 'GIT_AUTHOR_IDENT'), ('committer', 'GIT_COMMITTER_IDENT')):
+        raw = git('var', var, check=False)
+        name_email = raw.split('>', 1)[0] + '>' if '<' in raw and '>' in raw else ''
+        if not name_email or name_email.startswith(' <') or ' <' not in name_email:
+            print(f'FAIL: git {what} identity is not usable ({raw or "unset"}); '
+                  'configure user.name and user.email in this checkout.')
             return 1
+        idents[what] = name_email
+    print('Using configured git identity: ' + idents['author']
+          + ('' if idents['author'] == idents['committer']
+             else f' (committer: {idents["committer"]})'))
     if git('tag', '--list', tag):
         print(f'FAIL: tag {tag} already exists.')
         return 1

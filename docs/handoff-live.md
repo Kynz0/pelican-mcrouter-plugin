@@ -235,8 +235,8 @@ Paseo scripts:
 
 - `release-dry` — `scripts/release.py --dry`: prechecks + build + the exact
   update.json/commands it would publish; nothing is written or pushed.
-- `release` — full flow: prechecks (clean tree, identity
-  `kynzo <kynzo@users.noreply.git.kynzo.org>`, unused tag) → build ZIP →
+- `release` — full flow: prechecks (clean tree, the checkout's configured
+  git identity, unused tag) → build ZIP →
   regenerate + commit `update.json` on the current branch → push branch +
   tag `v<version>` → `tea release create` with the ZIP asset → single-file
   push of `update.json` to `main` via a detached temp worktree (no branch
@@ -263,7 +263,8 @@ path is exercised only after the first live install (approval pending).
 
 ## Session conventions (from AGENTS.md + this session)
 
-- Commits as `kynzo <kynzo@users.noreply.git.kynzo.org>`; commit incrementally.
+- Commits with the checkout's configured git identity (no identity is
+  hardcoded anywhere, including `scripts/release.py`); commit incrementally.
 - Preview: `paseo script start dev --cwd "$PWD"`, then
   `paseshare <port> --detach`; write the origin to `.dev/public-url`; run
   `php scripts/setup-preview.php` (preserves the test admin password;
