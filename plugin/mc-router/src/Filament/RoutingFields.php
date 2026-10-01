@@ -126,7 +126,9 @@ final class RoutingFields
         if ($poolCount === 0) {
             return 'The approved allocations configured for this node no longer exist. Rebuild the pool in Admin → Plugins → MC Router → Settings.';
         }
-        $free = collect(self::allocations())->contains(fn (array $a) => (int) $a['node_id'] === $nodeId && $a['server_id'] === null);
+        $free = collect(self::allocations())->contains(fn (array $a) => (int) $a['node_id'] === $nodeId
+            && in_array((int) $a['id'], array_map('intval', $pool), true)
+            && $a['server_id'] === null);
         if (!$free) {
             return 'All ' . $poolCount . ' approved allocations on this node are already assigned to other servers. Free one up, or create/extend the pool in the plugin settings.';
         }

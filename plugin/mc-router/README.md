@@ -155,6 +155,27 @@ MC_ROUTER_SUFFIX=mc.example.org
 MC_ROUTER_POOLS={"1":[10,11,12]}   # node ID → allocation IDs
 ```
 
+## Console address port hiding (temporary)
+
+On the server console, Pelican shows `join-address:port` (e.g.
+`myserver.mc.example.org:25567`). That port is the *backend* port — Minecraft
+clients join via the default port, so the suffix is confusing. MC Router
+therefore hides the port on the console **for routed servers only**, via a
+small injected script (set `MC_ROUTER_HIDE_CONSOLE_PORT=false` in the Panel
+`.env` to turn it off instantly).
+
+**This is a documented temporary stopgap.** Pelican core renders the address
+and beta38 has no clean plugin hook for it. Upstream PR
+[pelican/panel#2511](https://github.com/pelican/panel/pull/2511)
+("Add allocation port visibility option") was merged into main on 2026-08-22 —
+after the newest release, beta38 — so a native per-allocation "Show port"
+toggle will ship in the next Panel release. When your Panel is upgraded past
+it, remove the plugin's hook: delete
+`src/Filament/ConsoleAddressHook.php`, remove the
+`registerRenderHook(...)` block in `src/Providers/McRouterProvider.php`, and
+delete the `hide_console_port` line in `config/mc-router.php`. The hook fails
+open (if Pelican changes its markup, it silently does nothing).
+
 ## Lifecycle & guarantees
 
 - **Dry-run by default.** Choose routing on a server, save it, and nothing

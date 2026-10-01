@@ -13,6 +13,42 @@ use Filament\Schemas\Components\Utilities\Get;
 
 final class SettingsForm
 {
+    /** Node/IP picker shared by the pool tools: IP dropdown defaults to the node's most-used IP, custom IP via suffix action. */
+    private static function ipSelectSchema(): array
+    {
+        return [
+            'node' => Select::make('node_id')->label('Wings node')->options(fn () => Node::orderBy('name')->pluck('name', 'id'))
+                ->required()->live(),
+            'ip' => Select::make('allocation_ip')->label('IP address')->live()
+                ->options(fn (Get $get) => collect(app(\Kynzo\McRouter\Services\AllocationPool::class)->allocationIps((int) $get('node_id')))
+                    ->when($get('allocation_ip'), fn ($ips, $current) => $ips->push($current))
+                    ->unique()->mapWithKeys(fn (string $ip) => [$ip => $ip]))
+                ->default(fn (Get $get) => app(\Kynzo\McRouter\Services\AllocationPool::class)->commonIp((int) $get('node_id')))
+                ->required()
+                ->suffixAction(\Filament\Actions\Action::make('mc_router_custom_ip')->icon(\App\Enums\TablerIcon::Keyboard)
+                    ->tooltip('Use a custom IP')
+                    ->schema([TextInput::make('custom_ip')->label('IP address')->ip()->required()])
+                    ->action(fn (array $data, Set $set) => $set('allocation_ip', $data['custom_ip']))),
+        ];
+    }
+
+    /** Append allocation IDs to the pool row of the node (creating the row if needed); returns the actually-added IDs. */
+    private static function mergeIntoPoolRows(Get $get, Set $set, int $node, array $ids): array
+    {
+        $rows = collect($get('pool_rows') ?? [])->values();
+        $index = $rows->search(fn ($row) => (int) ($row['node_id'] ?? 0) === $node);
+        if ($index === false) {
+            $index = $rows->count();
+            $rows->push(['node_id' => $node, 'allocation_ids' => []]);
+        }
+        $current = collect($rows[$index]['allocation_ids'] ?? [])->map(fn ($v) => (int) $v);
+        $added = collect($ids)->map(fn ($v) => (int) $v)->reject(fn (int $id) => $current->contains($id))->values();
+        $rows[$index] = ['node_id' => $node, 'allocation_ids' => $current->merge($added)->unique()->values()->all()];
+        $set('pool_rows', $rows->all());
+
+        return ['rows' => $rows, 'added' => $added->all()];
+    }
+
     public static function values(array $data): array
     {
         $pools = [];
@@ -86,89 +122,90 @@ final class SettingsForm
                     ->options(fn (Get $get) => Allocation::where('node_id', $get('node_id'))->orderBy('port')->get()
                         ->mapWithKeys(fn ($a) => [$a->id => $a->ip . ':' . $a->port
                             . ($a->server_id ? " — '" . (\App\Models\Server::find($a->server_id)?->name ?? 'server #' . $a->server_id) . "'" : '')])),
-                \Filament\Schemas\Components\Actions::make([
-                    \Filament\Actions\Action::make('mc_router_pool_add_range')->label('Add existing ports in range')->color('gray')
-                        ->icon(\App\Enums\TablerIcon::ArrowsJoin2)
-                        ->schema([
-                            TextInput::make('start')->label('Start port')->numeric()->minValue(1024)->maxValue(65535)->required(),
-                            TextInput::make('end')->label('End port (max 1000 apart)')->numeric()->minValue(1024)->maxValue(65535)->required(),
-                        ])
-                        ->action(function (array $data, Get $get, Set $set) {
-                            $start = (int) $data['start']; $end = (int) $data['end'];
-                            if ($start > $end || $end - $start > 999) {
-                                \Filament\Notifications\Notification::make()->title('Invalid range — ports must be 1024–65535, at most 1000 apart')->danger()->send();
-                                return;
-                            }
-                            $found = app(\Kynzo\McRouter\Services\AllocationPool::class)->inRange((int) $get('node_id'), $start, $end);
-                            $current = collect($get('allocation_ids') ?? [])->map(fn ($v) => (int) $v);
-                            $added = collect($found['ids'])->reject(fn ($id) => $current->contains($id))->values();
-                            if ($added->isEmpty()) {
-                                \Filament\Notifications\Notification::make()->title('No new allocations in that range')->body('Nothing on this node exists between those ports, or everything found is already in the pool.')->warning()->send();
-                                return;
-                            }
-                            $set('allocation_ids', $current->merge($added)->unique()->values()->all());
-                            \Filament\Notifications\Notification::make()->title($added->count() . ' allocation(s) added to the pool')
-                                ->body(($found['skipped'] || count($found['ids']) > $added->count() ? 'Skipped ' . (count($found['ids']) - $added->count()) . ' already in the pool. ' : '') . 'Remember to save the settings.')->success()->send();
-                        }),
-                    \Filament\Actions\Action::make('mc_router_pool_create_range')->label('Create new allocations')->color('gray')
-                        ->icon(\App\Enums\TablerIcon::Plus)
-                        ->schema([
-                            TextInput::make('allocation_ip')->label('Allocation IP on this node')->required()
-                                ->helperText('Must be an IP address already available on this node (the same one your other allocations use).'),
-                            TextInput::make('start')->label('Start port')->numeric()->minValue(1024)->maxValue(65535)->required(),
-                            TextInput::make('count')->label('How many ports')->numeric()->minValue(1)->maxValue(1000)->required(),
-                        ])
-                        ->action(function (array $data, Get $get, Set $set) {
-                            if (!filter_var($data['allocation_ip'], FILTER_VALIDATE_IP)) {
-                                \Filament\Notifications\Notification::make()->title('Enter a valid IP address present on this node')->danger()->send();
-                                return;
-                            }
-                            $start = (int) $data['start'];
-                            if ($start + (int) $data['count'] - 1 > 65535) {
-                                \Filament\Notifications\Notification::make()->title('Range exceeds port 65535')->danger()->send();
-                                return;
-                            }
-                            $result = app(\Kynzo\McRouter\Services\AllocationPool::class)->createRange((int) $get('node_id'), $data['allocation_ip'], $start, (int) $data['count']);
-                            if (!$result['created']) {
-                                \Filament\Notifications\Notification::make()->title('Nothing created')
-                                    ->body('All ' . $result['skipped'] . ' port(s) already exist on this node and were skipped.')->warning()->send();
-                                return;
-                            }
-                            $current = collect($get('allocation_ids') ?? [])->map(fn ($v) => (int) $v);
-                            $set('allocation_ids', $current->merge($result['created'])->unique()->values()->all());
-                            \Filament\Notifications\Notification::make()->title(count($result['created']) . ' allocation(s) created and added to the pool')
-                                ->body(($result['skipped'] ? $result['skipped'] . ' already-existing port(s) were skipped. ' : '') . 'Remember to save the settings.')->success()->send();
-                        }),
-                    \Filament\Actions\Action::make('mc_router_pool_auto_range')->label('Auto-generate an uncommon range')->color('gray')
-                        ->icon(\App\Enums\TablerIcon::Wand)
-                        ->schema([
-                            TextInput::make('allocation_ip')->label('Allocation IP on this node')->required()
-                                ->helperText('Must be an IP address already available on this node (the same one your other allocations use).'),
-                        ])
-                        ->action(function (array $data, Get $get, Set $set) {
-                            if (!filter_var($data['allocation_ip'], FILTER_VALIDATE_IP)) {
-                                \Filament\Notifications\Notification::make()->title('Enter a valid IP address present on this node')->danger()->send();
-                                return;
-                            }
-                            $pool = app(\Kynzo\McRouter\Services\AllocationPool::class);
-                            $start = $pool->findUncommonStart((int) $get('node_id'), 10);
-                            if ($start === null) {
-                                \Filament\Notifications\Notification::make()->title('Could not find a free uncommon range of 10 ports')->warning()->send();
-                                return;
-                            }
-                            $result = $pool->createRange((int) $get('node_id'), $data['allocation_ip'], $start, 10);
-                            if (!$result['created']) {
-                                \Filament\Notifications\Notification::make()->title('Nothing created')
-                                    ->body('All port(s) already exist on this node and were skipped.')->warning()->send();
-                                return;
-                            }
-                            $current = collect($get('allocation_ids') ?? [])->map(fn ($v) => (int) $v);
-                            $set('allocation_ids', $current->merge($result['created'])->unique()->values()->all());
-                            \Filament\Notifications\Notification::make()->title('Created uncommon ports ' . $start . '–' . ($start + count($result['created']) - 1))
-                                ->body('Common service/game ports were avoided. Remember to save the settings.')->success()->send();
-                        }),
-                ])->columnSpanFull(),
             ])->helperText('Explicit allocations, including occupied ones that may become available later. Extra mod/voice ports should not be included.'),
+            \Filament\Schemas\Components\Actions::make([
+                \Filament\Actions\Action::make('mc_router_pool_add_range')->label('Add existing ports in range')->color('gray')
+                    ->icon(\App\Enums\TablerIcon::ArrowsJoin2)
+                    ->schema(self::ipSelectSchema() + [
+                        'extra' => [TextInput::make('range')->label('Port range')->placeholder('25565-25574')->required()
+                            ->helperText('A single port or a start–end range; adds every allocation that already exists in that range on the node.')],
+                    ])
+                    ->action(function (array $data, Get $get, Set $set) {
+                        $node = (int) ($data['node_id'] ?? 0);
+                        $range = \Kynzo\McRouter\Services\AllocationPool::parsePortRange((string) ($data['range'] ?? ''));
+                        if (!$node || $range === null || $range[1] - $range[0] > 999) {
+                            \Filament\Notifications\Notification::make()->title('Invalid node or port range — use 1024–65535, at most 1000 apart')->danger()->send();
+                            return;
+                        }
+                        $found = app(\Kynzo\McRouter\Services\AllocationPool::class)->inRange($node, $range[0], $range[1]);
+                        $rows = self::mergeIntoPoolRows($get, $set, $node, $found['ids']);
+                        if (empty($found['ids'])) {
+                            \Filament\Notifications\Notification::make()->title('No allocations in that range')->body('Nothing on this node exists between those ports. Create new allocations instead.')->warning()->send();
+                            return;
+                        }
+                        $already = count($found['ids']) - count($rows['added']);
+                        \Filament\Notifications\Notification::make()->title(count($rows['added']) . ' allocation(s) added to the pool')
+                            ->body(($already > 0 ? "{$already} already in the pool. " : '') . 'Remember to save the settings.')->success()->send();
+                    }),
+                \Filament\Actions\Action::make('mc_router_pool_create_range')->label('Create new allocations')->color('gray')
+                    ->icon(\App\Enums\TablerIcon::Plus)
+                    ->schema(self::ipSelectSchema() + [
+                        'extra' => [\Filament\Forms\Components\TagsInput::make('ports')->label('Ports')->placeholder('27015, 27017-27019')
+                            ->splitKeys(['Tab', ' ', ','])->required()
+                            ->helperText('One port or a range; creates real allocations on the node (existing ports are skipped).')],
+                    ])
+                    ->action(function (array $data, Get $get, Set $set) {
+                        $node = (int) ($data['node_id'] ?? 0);
+                        $ip = (string) ($data['allocation_ip'] ?? '');
+                        if (!$node || !$ip) {
+                            \Filament\Notifications\Notification::make()->title('Pick a node and an IP address first')->danger()->send();
+                            return;
+                        }
+                        try {
+                            $result = app(\Kynzo\McRouter\Services\AllocationPool::class)->createPorts($node, $ip, $data['ports'] ?? []);
+                        } catch (\Illuminate\Validation\ValidationException $e) {
+                            \Filament\Notifications\Notification::make()->title('Could not create allocations')->body(collect($e->errors())->flatten()->first())->danger()->send();
+                            return;
+                        }
+                        self::mergeIntoPoolRows($get, $set, $node, $result['created']);
+                        if (!$result['created']) {
+                            \Filament\Notifications\Notification::make()->title('Nothing created')
+                                ->body('All ' . $result['requested'] . ' port(s) already exist on this node and were skipped.')->warning()->send();
+                            return;
+                        }
+                        \Filament\Notifications\Notification::make()->title(count($result['created']) . ' allocation(s) created and added to the pool')
+                            ->body(($result['skipped'] ? "{$result['skipped']} already-existing port(s) were skipped. " : '') . 'Remember to save the settings.')->success()->send();
+                    }),
+                \Filament\Actions\Action::make('mc_router_pool_auto_range')->label('Auto-generate an uncommon range')->color('gray')
+                    ->icon(\App\Enums\TablerIcon::Wand)
+                    ->schema(self::ipSelectSchema() + [
+                        'extra' => [TextInput::make('count')->label('How many ports')->numeric()->minValue(1)->maxValue(1000)->default(10)->required()
+                            ->helperText('Picks a random free range avoiding well-known and common service/game ports, creates the allocations and adds them to the pool.')],
+                    ])
+                    ->action(function (array $data, Get $get, Set $set) {
+                        $node = (int) ($data['node_id'] ?? 0);
+                        $ip = (string) ($data['allocation_ip'] ?? '');
+                        $count = (int) ($data['count'] ?? 10);
+                        if (!$node || !$ip) {
+                            \Filament\Notifications\Notification::make()->title('Pick a node and an IP address first')->danger()->send();
+                            return;
+                        }
+                        $pool = app(\Kynzo\McRouter\Services\AllocationPool::class);
+                        $start = $pool->findUncommonStart($node, $count);
+                        if ($start === null) {
+                            \Filament\Notifications\Notification::make()->title("Could not find a free uncommon range of {$count} ports")->warning()->send();
+                            return;
+                        }
+                        $result = $pool->createPorts($node, $ip, range($start, $start + $count - 1));
+                        self::mergeIntoPoolRows($get, $set, $node, $result['created']);
+                        if (!$result['created']) {
+                            \Filament\Notifications\Notification::make()->title('Nothing created')->body('All port(s) already exist on this node.')->warning()->send();
+                            return;
+                        }
+                        \Filament\Notifications\Notification::make()->title('Created uncommon ports ' . $start . '–' . ($start + count($result['created']) - 1))
+                            ->body('Common service/game ports were avoided. Remember to save the settings.')->success()->send();
+                    }),
+            ]),
             Select::make('eggs')->label('Eggs with MC Router')->multiple()->searchable()
                 ->options(fn () => \App\Models\Egg::orderBy('name')->pluck('name', 'id'))
                 ->hintAction(\Filament\Actions\Action::make('mc_router_add_minecraft_tagged')->label("Add all eggs tagged 'minecraft'")

@@ -34,14 +34,20 @@ live integration, in one place.
   (uncommon-ports) actions backed by `Services/AllocationPool.php` +
   `Domain/PortRanges.php`; the SSH setup guide is an in-panel modal that can
   generate the keypair.
+- **Console address port hiding — implemented as user-approved option (b),
+  TEMPORARY:** a render-hook script
+  (`src/Filament/ConsoleAddressHook.php`, registered in the provider, off-switch
+  `MC_ROUTER_HIDE_CONSOLE_PORT=false`) strips the `:port` suffix from the
+  console Address block for routed servers only, self-healing on Livewire
+  morphs, failing open on markup changes. Verified in a real browser. Upstream
+  **pelican/panel#2511** ("Add allocation port visibility option", merged into
+  main 2026-08-22 — after the newest release beta38) will provide the native
+  fix; remove the hook when the user's Panel ships it (instructions in the
+  plugin README and the file's docblock). plugin.json panels are now
+  `["admin","app"]` — the hook must render in the server area; existing
+  installs need a reinstall to pick up the wider panel scope.
 - The user approves each live step when reached; CT changes are done by the
   user (or by the agent after explicit task-scoped approval).
-- **Console address port display (not implemented, user to decide):** the
-  `hostname:port` shown on the console comes from core `Allocation::address`
-  + core `ServerOverview` widget; no clean plugin hook exists. Options:
-  keep as-is (docs explain the port is not part of the join address), a
-  fragile JS render-hook that strips the port for routed servers, or an
-  upstream Pelican change (e.g. omit port when an ip_alias is set).
 - **Nothing is installed on the user's live Panel/router.** The live panel is
   `/var/www/pelican` (never touch without explicit task-scoped approval), the
   live router CT is `192.168.1.204`.

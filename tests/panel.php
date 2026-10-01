@@ -150,9 +150,9 @@ try {
         ->assertSee('already assigned to other servers');
     // Pool helpers: range creation skips existing ports; auto-generation avoids common ports.
     $pool = app(Kynzo\McRouter\Services\AllocationPool::class);
-    $created = $pool->createRange($regNode->id, '192.0.2.20', 41730, 12);
+    $created = $pool->createPorts($regNode->id, '192.0.2.20', range(41730, 41741));
     if (count($created['created']) !== 12 || $created['skipped'] !== 0) { throw new RuntimeException('Range creation did not create the free ports.'); }
-    $partial = $pool->createRange($regNode->id, '192.0.2.20', 41735, 10);
+    $partial = $pool->createPorts($regNode->id, '192.0.2.20', ['41735-41744']);
     if (count($partial['created']) !== 3 || $partial['skipped'] !== 7) { throw new RuntimeException('Range creation did not skip existing ports.'); }
     $auto = $pool->findUncommonStart($regNode->id, 10);
     if ($auto === null) { throw new RuntimeException('Auto-generation found no uncommon range.'); }
@@ -162,6 +162,10 @@ try {
     }
     $emptyNode = App\Models\Node::factory()->create();
     if ($pool->findUncommonStart($emptyNode->id, 10) === null) { throw new RuntimeException('Auto-generation failed on an empty node.'); }
+    foreach ([['25565', [25565, 25565]], ['25565-25574', [25565, 25574]], [' 27017-27019 ', [27017, 27019]], ['27019-27017', [27017, 27019]], ['abc', null], ['', null]] as [$entry, $expect]) {
+        if (Kynzo\McRouter\Services\AllocationPool::parsePortRange($entry) !== $expect) { throw new RuntimeException('Port range parse failed for ' . $entry); }
+    }
+    if ($pool->commonIp($regNode->id) !== '192.0.2.20') { throw new RuntimeException('commonIp did not pick the dominant IP.'); }
     if (app(Kynzo\McRouter\Services\Settings::class)->get()['suffix'] !== 'saved.example.org') { throw new RuntimeException('Invalid settings were saved.'); }
     $values = app(Kynzo\McRouter\Services\Settings::class)->get();
     $otherEgg = App\Models\Egg::factory()->create(['name' => 'Rust']);
