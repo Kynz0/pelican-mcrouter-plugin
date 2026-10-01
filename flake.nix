@@ -9,7 +9,7 @@
       devShells = eachSystem (system:
         let pkgs = nixpkgs.legacyPackages.${system}; in {
           default = pkgs.mkShell {
-            packages = with pkgs; [ php84 php84Packages.composer python3 git curl unzip zip go nodejs yarn openssh ];
+            packages = with pkgs; [ php84 php84Packages.composer python3 git curl unzip zip go nodejs yarn openssh tea ];
           };
         } // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           browser = pkgs.mkShell {

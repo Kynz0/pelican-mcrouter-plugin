@@ -221,6 +221,31 @@ fresh password-setup link; existing admin password preserved otherwise.
 Lint/docs/check: `nix run .#test`. Packaging: version comes from
 `plugin.json`; run `scripts/package.py` before `tests/import.php`.
 
+## Releases (Paseo press-a-button)
+
+The plugin-update workflow is fully wired: `plugin.json` carries
+`update_url` → `.../raw/branch/main/update.json`, and the release scripts
+keep that feed in sync (Pelican's updater polls it, compares versions, and
+offers an in-panel update that downloads the release ZIP and re-imports).
+
+Paseo scripts:
+
+- `release-dry` — `scripts/release.py --dry`: prechecks + build + the exact
+  update.json/commands it would publish; nothing is written or pushed.
+- `release` — full flow: prechecks (clean tree, identity
+  `kynzo <kynzo@users.noreply.git.kynzo.org>`, unused tag) → build ZIP →
+  regenerate + commit `update.json` on the current branch → push branch +
+  tag `v<version>` → `tea release create` with the ZIP asset → single-file
+  push of `update.json` to `main` via a detached temp worktree (no branch
+  merge; opt out with `--no-publish-main`). Versions containing a hyphen
+  (`0.4.1-dev`) are published as prereleases; `--stable` overrides.
+- `release-publish-main` — only re-pushes `update.json` from the current
+  branch to `main` (fix-ups; no-op if identical).
+
+To cut a release: bump `version` in `plugin.json`, commit, then press
+`release`. Nothing is installed on the live Panel, so the in-panel update
+path is exercised only after the first live install (approval pending).
+
 ## Open items before a live install (from TODO.md, condensed)
 
 - Approval + plan for live: plugin install, SSH account/key on the router CT,

@@ -7,6 +7,8 @@
   "category": "plugin",
   "namespace": "Kynzo\\McRouter",
   "class": "McRouterPlugin",
+  "url": "https://git.kynzo.org/kynzo/pelican-mcrouter-plugin",
+  "update_url": "https://git.kynzo.org/kynzo/pelican-mcrouter-plugin/raw/branch/main/update.json",
   "panels": [
     "admin",
     "app"

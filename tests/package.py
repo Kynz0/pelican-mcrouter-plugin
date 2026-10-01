@@ -16,7 +16,8 @@ with tempfile.TemporaryDirectory() as directory:
     with zipfile.ZipFile(output) as archive:
         names = archive.namelist()
         manifest = json.loads(archive.read('mc-router/plugin.json'))
-        assert manifest['panels'] == ['admin']
+        assert manifest['panels'] == ['admin', 'app']
+        assert manifest['update_url'].startswith('https://git.kynzo.org/')
         assert manifest['panel_version'] == '1.0.0-beta38'
         assert 'meta' not in manifest
         assert all(n.startswith('mc-router/') and '..' not in n for n in names)

@@ -5,6 +5,9 @@
     "docs": { "command": "nix develop -c python3 scripts/serve_docs.py --port $PASEO_PORT", "type": "service" },
     "test": { "command": "nix run .#test" },
     "lint": { "command": "nix develop -c bash scripts/lint.sh" },
-    "integration": { "command": "nix develop -c bash scripts/integration.sh" }
+    "integration": { "command": "nix develop -c bash scripts/integration.sh" },
+    "release-dry": { "command": "nix develop -c python3 scripts/release.py --dry" },
+    "release": { "command": "nix develop -c python3 scripts/release.py" },
+    "release-publish-main": { "command": "nix develop -c python3 scripts/release.py --publish-main-only" }
   }
 }

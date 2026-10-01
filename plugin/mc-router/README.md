@@ -11,6 +11,10 @@ server — no extra port forwarding per server.
 - No client-area controls, no game console/file access, no companion service.
 - Dry-run by default: nothing leaves the Panel until a live transport is
   explicitly configured and saved.
+- Auto-updates: releases are published with an `update.json` feed
+  (`update_url` in `plugin.json`), so the Panel's plugin page shows an
+  in-panel Update action when a newer release exists; `php artisan
+  p:plugin:update mc-router` works too.
 - csak requires the mc-router REST API; there is no mc-router patching.
 
 > Compatibility: Panel `v1.0.0-beta38`, mc-router `v1.47.1`. Other versions
