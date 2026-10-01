@@ -165,7 +165,9 @@ On the server console, Pelican shows `join-address:port` (e.g.
 `myserver.mc.example.org:25567`). That port is the *backend* port — Minecraft
 clients join via the default port, so the suffix is confusing. MC Router
 therefore hides the port on the console **for routed servers only**, via a
-small injected script (set `MC_ROUTER_HIDE_CONSOLE_PORT=false` in the Panel
+small injected script. Clicking the Address block copies the join address
+**without** the port (the hook wraps the panel's clipboard call). Set
+`MC_ROUTER_HIDE_CONSOLE_PORT=false` in the Panel
 `.env` to turn it off instantly).
 
 **This is a documented temporary stopgap.** Pelican core renders the address

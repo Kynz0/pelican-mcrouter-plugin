@@ -20,9 +20,15 @@ namespace Kynzo\McRouter\Filament;
  *
  * Fragility, documented: it matches the beta38 markup `.fi-small-stat-block`
  * and rewrites the value span's text. It self-heals on Livewire morphs via a
- * debounced MutationObserver. If Pelican changes the markup the hook silently
- * does nothing (fails open, never breaks the page). The block's copy button
- * still copies `hostname:port` — cosmetic.
+ * synchronous MutationObserver (no debounce: the widget polls every second and
+ * each morph restores the port; running `clean()` in the observer microtask
+ * fixes the text before paint, so the user never sees the port flash). If
+ * Pelican changes the markup the hook silently does nothing (fails open, never
+ * breaks the page). The block's copy text is baked into the inline click
+ * handler by core (`@js($value)` in
+ * `filament/components/server-small-data-block.blade.php`), so DOM edits can't
+ * change it; instead the hook wraps `navigator.clipboard.writeText` once and
+ * strips the port from any copy of a routed `hostname:port` value.
  *
  * Disable instantly without code changes: MC_ROUTER_HIDE_CONSOLE_PORT=false.
  */
@@ -36,31 +42,36 @@ final class ConsoleAddressHook
 
         $js = <<<'JS'
 (function () {
+    if (window.__mcRouterConsoleAddressHook) { return; }
+    window.__mcRouterConsoleAddressHook = true;
     var routed = ROUTED_JSON;
+    function routedHostOf(text) {
+        text = (text || '').trim();
+        for (var i = 0; i < routed.length; i++) {
+            var host = routed[i];
+            if (text.slice(0, host.length + 1) === host + ':') { return host; }
+        }
+        return null;
+    }
     function clean() {
         var blocks = document.querySelectorAll('.fi-small-stat-block');
         for (var b = 0; b < blocks.length; b++) {
             var spans = blocks[b].querySelectorAll('span');
             var value = spans[spans.length - 1];
             if (!value) { continue; }
-            var text = (value.textContent || '').trim();
-            var colon = text.indexOf(':');
-            if (colon < 1) { continue; }
-            for (var i = 0; i < routed.length; i++) {
-                var host = routed[i];
-                if (text.slice(0, host.length + 1) === host + ':') {
-                    if (text !== host) { value.textContent = host; }
-                    break;
-                }
-            }
+            var host = routedHostOf(value.textContent);
+            if (host !== null && value.textContent !== host) { value.textContent = host; }
         }
     }
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        var write = navigator.clipboard.writeText.bind(navigator.clipboard);
+        navigator.clipboard.writeText = function (text) {
+            var host = routedHostOf(text);
+            return write(host === null ? text : host);
+        };
+    }
     clean();
-    var timer = null;
-    new MutationObserver(function () {
-        if (timer) { return; }
-        timer = setTimeout(function () { timer = null; clean(); }, 200);
-    }).observe(document.body, { childList: true, subtree: true });
+    new MutationObserver(clean).observe(document.body, { childList: true, subtree: true });
 })();
 JS;
 

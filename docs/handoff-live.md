@@ -39,7 +39,10 @@ live integration, in one place.
   (`src/Filament/ConsoleAddressHook.php`, registered in the provider, off-switch
   `MC_ROUTER_HIDE_CONSOLE_PORT=false`) strips the `:port` suffix from the
   console Address block for routed servers only, self-healing on Livewire
-  morphs, failing open on markup changes. Verified in a real browser. Upstream
+  morphs, failing open on markup changes. Clicking the block copies the
+  address without the port (the hook wraps `navigator.clipboard.writeText`,
+  since beta38 bakes the copy value into the inline click handler). Verified in
+  a real browser. Upstream
   **pelican/panel#2511** ("Add allocation port visibility option", merged into
   main 2026-08-22 — after the newest release beta38) will provide the native
   fix; remove the hook when the user's Panel ships it (instructions in the
