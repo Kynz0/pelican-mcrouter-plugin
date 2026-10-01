@@ -41,7 +41,11 @@ server — no extra port forwarding per server.
   Your existing manual routes (e.g. an old hand-created one) are never
   touched.
 - If the router is unreachable, routes stay `Pending`/`Error` and retry;
-  nothing in the Panel restart or stop game servers.
+  nothing in the Panel restarts or stops game servers.
+- The server-edit MC Router tab has a **Verify end-to-end** action: it reads
+  the mapping back from the router, resolves the join address via DNS, and
+  opens a TCP connection through the router's public port — a green result
+  means the whole chain works from the Panel host.
 
 ## Setup
 
@@ -50,7 +54,10 @@ Admin → Plugins → MC Router → Settings:
 1. Choose a **hostname suffix** (for example `mc.example.org`) and set up the
    matching wildcard DNS record outside the plugin.
 2. Configure the primary-allocation pools per Wings node — only allocations
-   you add there are offered for routing.
+   you add there are offered for routing. The pool editor can add existing
+   allocations by port range, show which server occupies each port, create
+   brand-new allocations in a range of your choice, or auto-generate a
+   brand-new range of uncommon free ports on the node.
 3. List the eggs that should get the routing step/tab (saving installs a
    `mc-router` feature on those eggs; the step only appears on eligible eggs).
 4. Pick a **router transport** and finish its subsection below.
@@ -83,6 +90,14 @@ The Panel opens a one-shot `ssh -W` tunnel to the router host and speaks the
 API through it. The SSH account is deliberately gutted: it cannot run
 commands, has no TTY, and may only forward to `127.0.0.1:<api-port>` on the
 router host.
+
+In the plugin settings pick **Restricted SSH forwarding** and use the
+**SSH setup guide** button right below the transport selection: it shows
+every step with exact copy-paste commands, and can generate the dedicated
+keypair on the Panel host for you (`php artisan mc-router:ssh-setup
+[--generate]` does the same from the CLI).
+
+Full manual walkthrough, if you prefer:
 
 1. On the **router host**, create a locked-down account (example for Debian):
    ```sh

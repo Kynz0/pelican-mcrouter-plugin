@@ -23,8 +23,25 @@ live integration, in one place.
   the bundled `plugin/mc-router/README.md` documents all transports for
   end users and the settings UI references it. Upstream PR for mid-wizard
   step placement was declined by the user.
+- **User feedback round (2026-10-01, v0.4.0-dev):** edit-tab fields now
+  re-hydrate from the route record on every form fill (fixed the reported
+  toggle/slug reset bug); allocation-availability notices distinguish an
+  unconfigured pool from a fully assigned one; the edit tab gained a
+  **Verify end-to-end** action (router readback → DNS → TCP join probe with
+  specific hints, informational backend probe); the eggs hint action moved
+  next to the eggs field; the pool editor shows occupied server names and
+  gained add-by-port-range, create-new-allocations and auto-generate
+  (uncommon-ports) actions backed by `Services/AllocationPool.php` +
+  `Domain/PortRanges.php`; the SSH setup guide is an in-panel modal that can
+  generate the keypair.
 - The user approves each live step when reached; CT changes are done by the
   user (or by the agent after explicit task-scoped approval).
+- **Console address port display (not implemented, user to decide):** the
+  `hostname:port` shown on the console comes from core `Allocation::address`
+  + core `ServerOverview` widget; no clean plugin hook exists. Options:
+  keep as-is (docs explain the port is not part of the join address), a
+  fragile JS render-hook that strips the port for routed servers, or an
+  upstream Pelican change (e.g. omit port when an ip_alias is set).
 - **Nothing is installed on the user's live Panel/router.** The live panel is
   `/var/www/pelican` (never touch without explicit task-scoped approval), the
   live router CT is `192.168.1.204`.

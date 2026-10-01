@@ -98,6 +98,70 @@ try {
     if (app(Kynzo\McRouter\Services\Settings::class)->get()['suffix'] !== 'saved.example.org') { throw new RuntimeException('Native settings action did not save.'); }
     $settingsPage->mountAction(Filament\Actions\Testing\TestAction::make('exclude_settings')->table('mc-router'))
         ->set('mountedActions.0.data.suffix', 'bad..example.org')->callMountedAction()->assertHasFormErrors(['suffix']);
+    // ======================================================================
+    // Regression: edit-tab fields must hydrate from the route record on initial fill
+    // (Filament skips defaults when edit pages fill with record data).
+    $regEgg = App\Models\Egg::factory()->create(['name' => 'Paper', 'tags' => ['minecraft']]);
+    $regEgg->features = [Kynzo\McRouter\Filament\RoutingFields::EGG_FEATURE];
+    $regEgg->save();
+    $regNode = App\Models\Node::factory()->create();
+    $regAlloc = App\Models\Allocation::factory()->create(['node_id' => $regNode->id, 'ip' => '192.0.2.20', 'port' => 25565]);
+    $regTaken = App\Models\Allocation::factory()->create(['node_id' => $regNode->id, 'ip' => '192.0.2.20', 'port' => 25566]);
+    config(['mc-router.pools' => [$regNode->id => [$regAlloc->id, $regTaken->id]]]);
+    Illuminate\Support\Facades\DB::table('mc_router_settings')->where('id', 1)->delete();
+    config(['mc-router.allow_insecure_http' => true, 'mc-router.preview_only' => false]);
+    app(Kynzo\McRouter\Services\Settings::class)->save(['mode' => 'http', 'http_host' => '127.0.0.1', 'http_port' => 65533,
+        'suffix' => 'saved.example.org', 'pools' => [$regNode->id => [$regAlloc->id, $regTaken->id]], 'eggs' => [$regEgg->id]]);
+    $regServer = App\Models\Server::factory()->create(['owner_id' => $admin->id, 'node_id' => $regNode->id, 'allocation_id' => $regAlloc->id, 'egg_id' => $regEgg->id, 'name' => 'Hydrate Me']);
+    $regAlloc->update(['server_id' => $regServer->id]);
+    $regRoute = Kynzo\McRouter\Models\RouteRecord::create(['server_uuid' => $regServer->uuid, 'hostname' => 'hydrate-me.saved.example.org',
+        'desired_allocation_id' => $regAlloc->id, 'enabled' => true, 'provisioned' => true, 'status' => 'pending', 'applied' => [], 'attempted' => []]);
+    $hydrated = Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\EditServer::class, ['record' => $regServer->id]);
+    if (($hydrated->instance()->data['mc_router_enabled'] ?? null) !== true) { throw new RuntimeException('Edit tab did not hydrate the enabled toggle from the route record.'); }
+    if (($hydrated->instance()->data['mc_router_slug'] ?? null) !== 'hydrate-me') { throw new RuntimeException('Edit tab did not hydrate the slug from the route record.'); }
+    if ((int) ($hydrated->instance()->data['mc_router_allocation_id'] ?? 0) !== $regAlloc->id) { throw new RuntimeException('Edit tab did not hydrate the primary allocation.'); }
+    $hydrated->assertSee('Verify end-to-end');
+    $unreachable = Mockery::mock();
+    $unreachable->shouldReceive('routes')->andThrow(new Kynzo\McRouter\Exceptions\RouterException('Disposable router outage.'));
+    $app->instance(Kynzo\McRouter\Services\RouterClient::class, $unreachable);
+    $verdict = app(Kynzo\McRouter\Services\Verifier::class)->check($regRoute->fresh());
+    if ($verdict['ok'] || !str_contains($verdict['message'], 'Router API unreachable')) { throw new RuntimeException('Verifier did not fail closed on router outage.'); }
+    $app->forgetInstance(Kynzo\McRouter\Services\RouterClient::class);
+    // In preview/forced dry-run the verifier must be hidden.
+    config(['mc-router.preview_only' => true]);
+    Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\EditServer::class, ['record' => $regServer->id])
+        ->assertDontSee('Verify end-to-end');
+    config(['mc-router.preview_only' => false]);
+    // Allocation notices: distinct errors for an unconfigured pool vs a fully assigned pool.
+    $noPoolNode = App\Models\Node::factory()->create();
+    $noPoolAlloc = App\Models\Allocation::factory()->create(['node_id' => $noPoolNode->id, 'ip' => '192.0.2.20', 'port' => 25567]);
+    $noPoolServer = App\Models\Server::factory()->create(['owner_id' => $admin->id, 'node_id' => $noPoolNode->id, 'allocation_id' => $noPoolAlloc->id, 'egg_id' => $regEgg->id]);
+    $noPoolAlloc->update(['server_id' => $noPoolServer->id]);
+    Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\EditServer::class, ['record' => $noPoolServer->id])
+        ->set('data.mc_router_enabled', true)
+        ->assertSee('No approved allocation pool is configured');
+    $outsideAlloc = App\Models\Allocation::factory()->create(['node_id' => $regNode->id, 'ip' => '192.0.2.20', 'port' => 25568]);
+    $takenServer = App\Models\Server::factory()->create(['owner_id' => $admin->id, 'node_id' => $regNode->id, 'allocation_id' => $outsideAlloc->id, 'egg_id' => $regEgg->id]);
+    $outsideAlloc->update(['server_id' => $takenServer->id]);
+    $regTaken->update(['server_id' => $regServer->id]);
+    $regAlloc->update(['server_id' => $regServer->id]);
+    Livewire\Livewire::test(App\Filament\Admin\Resources\Servers\Pages\EditServer::class, ['record' => $takenServer->id])
+        ->set('data.mc_router_enabled', true)
+        ->assertSee('already assigned to other servers');
+    // Pool helpers: range creation skips existing ports; auto-generation avoids common ports.
+    $pool = app(Kynzo\McRouter\Services\AllocationPool::class);
+    $created = $pool->createRange($regNode->id, '192.0.2.20', 41730, 12);
+    if (count($created['created']) !== 12 || $created['skipped'] !== 0) { throw new RuntimeException('Range creation did not create the free ports.'); }
+    $partial = $pool->createRange($regNode->id, '192.0.2.20', 41735, 10);
+    if (count($partial['created']) !== 3 || $partial['skipped'] !== 7) { throw new RuntimeException('Range creation did not skip existing ports.'); }
+    $auto = $pool->findUncommonStart($regNode->id, 10);
+    if ($auto === null) { throw new RuntimeException('Auto-generation found no uncommon range.'); }
+    for ($p = $auto; $p < $auto + 10; $p++) {
+        if (Kynzo\McRouter\Domain\PortRanges::isCommon($p)) { throw new RuntimeException('Auto-generation used a common port ' . $p); }
+        if (App\Models\Allocation::withoutGlobalScopes()->where('node_id', $regNode->id)->where('ip', '192.0.2.20')->where('port', $p)->exists()) { throw new RuntimeException('Auto-generation collided with an existing port ' . $p); }
+    }
+    $emptyNode = App\Models\Node::factory()->create();
+    if ($pool->findUncommonStart($emptyNode->id, 10) === null) { throw new RuntimeException('Auto-generation failed on an empty node.'); }
     if (app(Kynzo\McRouter\Services\Settings::class)->get()['suffix'] !== 'saved.example.org') { throw new RuntimeException('Invalid settings were saved.'); }
     $values = app(Kynzo\McRouter\Services\Settings::class)->get();
     $otherEgg = App\Models\Egg::factory()->create(['name' => 'Rust']);
@@ -171,7 +235,7 @@ try {
     } catch (Symfony\Component\HttpKernel\Exception\HttpException $e) {
         if ($e->getStatusCode() !== 403) { throw $e; }
     }
-    echo "OK: native creation step/edit tab, actual populated primary selector, slug hydration, specific confirmation, tagged-minecraft helper button, stale-record tab pinning, read-only info entries, egg-gated step/tab visibility, gated-egg creation bypass, non-admin denial\n";
+    echo "OK: native creation step/edit tab, populated primary selector, slug hydration, route-record fill hydration, allocation notices, end-to-end verifier gating, specific confirmation, tagged-eggs hint action, stale-record tab pinning, read-only info entries, egg-gated step/tab visibility, gated-egg creation bypass, non-admin denial, pool range helpers\n";
 } catch (PHPUnit\Framework\ExpectationFailedException $e) {
     echo $e->getComparisonFailure()?->getDiff();
     throw $e;
