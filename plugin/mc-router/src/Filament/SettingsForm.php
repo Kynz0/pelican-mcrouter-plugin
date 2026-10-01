@@ -10,6 +10,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 
 final class SettingsForm
 {
@@ -17,7 +18,8 @@ final class SettingsForm
     private static function ipSelectSchema(): array
     {
         return [
-            'node' => Select::make('node_id')->label('Wings node')->options(fn () => Node::orderBy('name')->pluck('name', 'id'))
+            'node' => Select::make('node_id')->label('Wings node')
+                ->options(fn () => Node::orderBy('name')->pluck('name', 'id'))
                 ->required()->live(),
             'ip' => Select::make('allocation_ip')->label('IP address')->live()
                 ->options(fn (Get $get) => collect(app(\Kynzo\McRouter\Services\AllocationPool::class)->allocationIps((int) $get('node_id')))
@@ -30,6 +32,15 @@ final class SettingsForm
                     ->schema([TextInput::make('custom_ip')->label('IP address')->ip()->required()])
                     ->action(fn (array $data, Set $set) => $set('allocation_ip', $data['custom_ip']))),
         ];
+    }
+
+    /** Modal description for the SSH setup guide: steps as escaped <p> blocks. */
+    private static function sshGuideHtml(int $apiPort, int $sshPort, string $user): \Illuminate\Support\HtmlString
+    {
+        $steps = app(\Kynzo\McRouter\Services\SshSetupGuide::class)->steps(false, apiPort: $apiPort, sshPort: $sshPort, user: $user)['steps'];
+        $paragraphs = collect($steps)->map(fn (string $step) => '<p>' . e($step) . '</p>')->implode('');
+
+        return new \Illuminate\Support\HtmlString('<div style="display:grid;gap:0.75rem;font-family:monospace;font-size:0.8rem;white-space:pre-wrap">' . $paragraphs . '</div>');
     }
 
     /** Append allocation IDs to the pool row of the node (creating the row if needed); returns the actually-added IDs. */
@@ -85,11 +96,11 @@ final class SettingsForm
                     ->visible(fn (Get $get) => !config('mc-router.preview_only') && $get('mode') === 'ssh')
                     ->authorize(fn () => user()?->isRootAdmin() ?? false)
                     ->modalHeading('Restricted SSH forwarding — setup guide')
-                    ->modalDescription(fn (Get $get) => new \Illuminate\Support\HtmlString('<div style="display:grid;gap:0.75rem;font-family:monospace;font-size:0.8rem;white-space:pre-wrap">'
-                        . collect(app(\Kynzo\McRouter\Services\SshSetupGuide::class)->steps(false,
-                                apiPort: (int) ($get('ssh_api_port') ?: 25564), sshPort: (int) ($get('ssh_port') ?: 22),
-                                user: $get('ssh_user') ?: 'mcrouter-api'))['steps']
-                            ->map(fn (string $step) => '<p>' . e($step) . '</p>')->implode('') . '</div>'))
+                    ->modalDescription(fn ($get) => self::sshGuideHtml(
+                        apiPort: (int) (is_array($get) ? ($get['ssh_api_port'] ?? null) : $get('ssh_api_port')) ?: 25564,
+                        sshPort: (int) (is_array($get) ? ($get['ssh_port'] ?? null) : $get('ssh_port')) ?: 22,
+                        user: (is_array($get) ? ($get['ssh_user'] ?? null) : $get('ssh_user')) ?: 'mcrouter-api',
+                    ))
                     ->modalSubmitActionLabel('Generate keypair on the Panel host')
                     ->action(function (Get $get) {
                         $guide = app(\Kynzo\McRouter\Services\SshSetupGuide::class)->steps(true,
@@ -127,8 +138,8 @@ final class SettingsForm
                 \Filament\Actions\Action::make('mc_router_pool_add_range')->label('Add existing ports in range')->color('gray')
                     ->icon(\App\Enums\TablerIcon::ArrowsJoin2)
                     ->schema(self::ipSelectSchema() + [
-                        'extra' => [TextInput::make('range')->label('Port range')->placeholder('25565-25574')->required()
-                            ->helperText('A single port or a start–end range; adds every allocation that already exists in that range on the node.')],
+                        'range' => TextInput::make('range')->label('Port range')->placeholder('25565-25574')->required()
+                            ->helperText('A single port or a start–end range; adds every allocation that already exists in that range on the node.'),
                     ])
                     ->action(function (array $data, Get $get, Set $set) {
                         $node = (int) ($data['node_id'] ?? 0);
@@ -150,9 +161,9 @@ final class SettingsForm
                 \Filament\Actions\Action::make('mc_router_pool_create_range')->label('Create new allocations')->color('gray')
                     ->icon(\App\Enums\TablerIcon::Plus)
                     ->schema(self::ipSelectSchema() + [
-                        'extra' => [\Filament\Forms\Components\TagsInput::make('ports')->label('Ports')->placeholder('27015, 27017-27019')
+                        'ports' => \Filament\Forms\Components\TagsInput::make('ports')->label('Ports')->placeholder('27015, 27017-27019')
                             ->splitKeys(['Tab', ' ', ','])->required()
-                            ->helperText('One port or a range; creates real allocations on the node (existing ports are skipped).')],
+                            ->helperText('One port or a range; creates real allocations on the node (existing ports are skipped).'),
                     ])
                     ->action(function (array $data, Get $get, Set $set) {
                         $node = (int) ($data['node_id'] ?? 0);
@@ -179,8 +190,8 @@ final class SettingsForm
                 \Filament\Actions\Action::make('mc_router_pool_auto_range')->label('Auto-generate an uncommon range')->color('gray')
                     ->icon(\App\Enums\TablerIcon::Wand)
                     ->schema(self::ipSelectSchema() + [
-                        'extra' => [TextInput::make('count')->label('How many ports')->numeric()->minValue(1)->maxValue(1000)->default(10)->required()
-                            ->helperText('Picks a random free range avoiding well-known and common service/game ports, creates the allocations and adds them to the pool.')],
+                        'count' => TextInput::make('count')->label('How many ports')->numeric()->minValue(1)->maxValue(1000)->default(10)->required()
+                            ->helperText('Picks a random free range avoiding well-known and common service/game ports, creates the allocations and adds them to the pool.'),
                     ])
                     ->action(function (array $data, Get $get, Set $set) {
                         $node = (int) ($data['node_id'] ?? 0);
