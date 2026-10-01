@@ -112,6 +112,30 @@ final class RoutingFields
         try { return AllocationSelector::backend($allocation->toArray()); } catch (\InvalidArgumentException) { return 'invalid backend address'; }
     }
 
+    /** Explanation shown when routing is enabled but no eligible primary is chosen. */
+    public static function allocationNotice(Get $get, ?Server $record, bool $creating): ?string
+    {
+        if (!$get('mc_router_enabled') || $get('mc_router_allocation_id')) { return null; }
+        $nodeId = $creating ? (int) $get('node_id') : ($record?->node_id ?? 0);
+        if (!$nodeId) { return 'Select a node first — routing needs an approved primary allocation on it.'; }
+        $pool = app(Settings::class)->get()['pools'][$nodeId] ?? [];
+        if (!$pool) {
+            return 'No approved allocation pool is configured for this node (Admin → Plugins → MC Router → Settings). Routing requires a primary from the pool, so saving is rejected.';
+        }
+        $poolCount = Allocation::withoutGlobalScopes()->whereIn('id', $pool)->count();
+        if ($poolCount === 0) {
+            return 'The approved allocations configured for this node no longer exist. Rebuild the pool in Admin → Plugins → MC Router → Settings.';
+        }
+        $free = collect(self::allocations())->contains(fn (array $a) => (int) $a['node_id'] === $nodeId
+            && in_array((int) $a['id'], array_map('intval', $pool), true)
+            && $a['server_id'] === null);
+        if (!$free) {
+            return 'All ' . $poolCount . ' approved allocations on this node are already assigned to other servers. Free one up, or create/extend the pool in the plugin settings.';
+        }
+
+        return 'Choose an approved primary allocation below — saving without one is rejected.';
+    }
+
     /** @return array{label: string, color: string} */
     public static function previewStatus(Get $get, ?Server $record, bool $creating): array
     {
@@ -165,6 +189,11 @@ final class RoutingFields
             Grid::make(2)->columnSpanFull()->schema([
                 Toggle::make('mc_router_enabled')->label('Use mc-router')->live()->inline(false)
                     ->default(fn (?Server $record) => self::record($record)?->enabled ?? false)
+                    // Filament only applies defaults when the form fills with no state
+                    // (beta38 edit pages fill with record data), so re-hydrate here.
+                    ->afterStateHydrated(function ($component, ?Server $record) {
+                        if ($record && ($route = self::record($record))) { $component->state((bool) $route->enabled); }
+                    })
                     ->dehydrated($creating)
                     ->afterStateUpdated(function ($state, Get $get, Set $set, ?Server $record, $livewire) use ($creating) {
                         $set('mc_router_confirmed_allocation', null);
@@ -206,6 +235,10 @@ final class RoutingFields
                         }
                     }),
                 Grid::make(1)->schema([
+                    \Filament\Forms\Components\Placeholder::make('mc_router_allocation_notice')->hiddenLabel()
+                        ->content(fn (Get $get, ?Server $record) => self::allocationNotice($get, $record, $creating))
+                        ->icon(TablerIcon::AlertTriangle)
+                        ->visible(fn (Get $get, ?Server $record) => self::allocationNotice($get, $record, $creating) !== null),
                     Placeholder::make('mc_router_disabled_info')->hiddenLabel()
                         ->content('mc-router is disabled. Normal Pelican allocation behavior is unchanged.')
                         ->visible(fn (Get $get) => !$get('mc_router_enabled')),
@@ -229,6 +262,9 @@ final class RoutingFields
                 TextInput::make('mc_router_slug')->label('Hostname label')->live(onBlur: true)->maxLength(63)
                     ->prefixIcon(TablerIcon::Link)->suffix('.' . app(Settings::class)->get()['suffix'])
                     ->default(fn (?Server $record) => ($route = self::record($record)) ? explode('.', $route->hostname)[0] : Hostname::suggest($record?->name ?? 'minecraft'))
+                    ->afterStateHydrated(function ($component, ?Server $record) {
+                        if ($record && ($route = self::record($record))) { $component->state(explode('.', $route->hostname)[0]); }
+                    })
                     ->visible(fn (Get $get) => (bool) $get('mc_router_enabled'))->dehydrated($creating)
                     ->required(fn (Get $get) => $creating && $get('mc_router_enabled'))
                     ->afterStateUpdated(fn (Set $set) => $set('mc_router_slug_edited', true)),
@@ -242,6 +278,13 @@ final class RoutingFields
                         $preferred = $route?->enabled ? ($route->desired_allocation_id ?? $record->allocation_id) : $record->allocation_id;
 
                         return collect(self::selector()->options(self::allocations(), $record->node_id, $record->id))->firstWhere('id', $preferred)['id'] ?? null;
+                    })
+                    ->afterStateHydrated(function ($component, ?Server $record) {
+                        if (!$record) { return; }
+                        $route = self::record($record);
+                        $preferred = $route?->enabled ? ($route->desired_allocation_id ?? $record->allocation_id) : $record->allocation_id;
+                        $chosen = collect(self::selector()->options(self::allocations(), $record->node_id, $record->id))->firstWhere('id', $preferred);
+                        $component->state($chosen['id'] ?? null);
                     })
                     ->options(fn (Get $get, ?Server $record) => collect(self::selector()->options(self::allocations(), $record?->node_id ?? (int) $get('node_id'), $record?->id))
                         ->mapWithKeys(fn (array $a) => [$a['id'] => AllocationSelector::backend($a)]))
@@ -264,6 +307,23 @@ final class RoutingFields
             // Routing settings are saved with the page's own "Save changes" button;
             // these actions only stage state inside the form.
             $fields[] = Actions::make([
+                Action::make('mc_router_verify')->label('Verify end-to-end')->color('gray')
+                    ->icon(TablerIcon::CircleCheck)
+                    ->visible(fn (Get $get, ?Server $record) => $get('mc_router_enabled') && self::record($record) !== null
+                        && app(Settings::class)->get()['mode'] !== 'dry-run')
+                    ->action(function (Server $record) {
+                        $route = self::record($record);
+                        if (!$route) {
+                            \Filament\Notifications\Notification::make()->title('No routing settings saved for this server yet')->danger()->send();
+                            return;
+                        }
+                        $result = app(\Kynzo\McRouter\Services\Verifier::class)->check($route);
+                        $notification = \Filament\Notifications\Notification::make()
+                            ->title($result['ok'] ? 'End-to-end check passed' : 'End-to-end check failed')
+                            ->body(trim(($result['warning'] ? $result['warning'] . "\n" : '') . $result['message']));
+                        $result['ok'] ? $notification->success() : $notification->danger();
+                        $notification->send();
+                    }),
                 Action::make('mc_router_select_replacement')->label('Automatically select eligible replacement')->color('gray')
                     ->icon(TablerIcon::Wand)
                     ->visible(fn (Get $get) => $get('mc_router_enabled') && !$get('mc_router_allocation_id'))

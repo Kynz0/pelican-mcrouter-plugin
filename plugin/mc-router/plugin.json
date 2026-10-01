@@ -2,13 +2,14 @@
   "id": "mc-router",
   "name": "MC Router",
   "author": "kynzo",
-  "version": "0.3.0-dev",
+  "version": "0.4.1-dev",
   "description": "Admin Minecraft routing with native wizard/tab controls, dry-run mode and restricted mc-router API synchronization",
   "category": "plugin",
   "namespace": "Kynzo\\McRouter",
   "class": "McRouterPlugin",
   "panels": [
-    "admin"
+    "admin",
+    "app"
   ],
   "panel_version": "1.0.0-beta38",
   "api_version": 1,

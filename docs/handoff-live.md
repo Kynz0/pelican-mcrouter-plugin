@@ -23,6 +23,29 @@ live integration, in one place.
   the bundled `plugin/mc-router/README.md` documents all transports for
   end users and the settings UI references it. Upstream PR for mid-wizard
   step placement was declined by the user.
+- **User feedback round (2026-10-01, v0.4.0-dev):** edit-tab fields now
+  re-hydrate from the route record on every form fill (fixed the reported
+  toggle/slug reset bug); allocation-availability notices distinguish an
+  unconfigured pool from a fully assigned one; the edit tab gained a
+  **Verify end-to-end** action (router readback → DNS → TCP join probe with
+  specific hints, informational backend probe); the eggs hint action moved
+  next to the eggs field; the pool editor shows occupied server names and
+  gained add-by-port-range, create-new-allocations and auto-generate
+  (uncommon-ports) actions backed by `Services/AllocationPool.php` +
+  `Domain/PortRanges.php`; the SSH setup guide is an in-panel modal that can
+  generate the keypair.
+- **Console address port hiding — implemented as user-approved option (b),
+  TEMPORARY:** a render-hook script
+  (`src/Filament/ConsoleAddressHook.php`, registered in the provider, off-switch
+  `MC_ROUTER_HIDE_CONSOLE_PORT=false`) strips the `:port` suffix from the
+  console Address block for routed servers only, self-healing on Livewire
+  morphs, failing open on markup changes. Verified in a real browser. Upstream
+  **pelican/panel#2511** ("Add allocation port visibility option", merged into
+  main 2026-08-22 — after the newest release beta38) will provide the native
+  fix; remove the hook when the user's Panel ships it (instructions in the
+  plugin README and the file's docblock). plugin.json panels are now
+  `["admin","app"]` — the hook must render in the server area; existing
+  installs need a reinstall to pick up the wider panel scope.
 - The user approves each live step when reached; CT changes are done by the
   user (or by the agent after explicit task-scoped approval).
 - **Nothing is installed on the user's live Panel/router.** The live panel is

@@ -84,5 +84,11 @@ final class McRouterProvider extends ServiceProvider
         $this->app->afterResolving(Schedule::class, function (Schedule $schedule) {
             $schedule->command('mc-router:reconcile')->everyMinute()->withoutOverlapping();
         });
+        // TEMPORARY console address port hiding (see Filament/ConsoleAddressHook.php).
+        // Remove together with that file once the Panel ships pelican/panel#2511.
+        \Filament\Support\Facades\FilamentView::registerRenderHook(
+            \Filament\View\PanelsRenderHook::SCRIPTS_AFTER,
+            fn (): string => \Kynzo\McRouter\Filament\ConsoleAddressHook::hook(),
+        );
     }
 }
