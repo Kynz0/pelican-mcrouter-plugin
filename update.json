@@ -1,8 +1,8 @@
 {
     "mc-router": {
         "*": {
-            "version": "0.4.2-dev",
-            "download_url": "https://git.kynzo.org/kynzo/pelican-mcrouter-plugin/releases/download/v0.4.2-dev/mc-router-0.4.2-dev.zip"
+            "version": "0.4.3-dev",
+            "download_url": "https://git.kynzo.org/kynzo/pelican-mcrouter-plugin/releases/download/v0.4.3-dev/mc-router-0.4.3-dev.zip"
         }
     }
 }
