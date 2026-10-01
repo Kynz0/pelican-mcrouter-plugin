@@ -26,7 +26,6 @@ def build(output: Path) -> None:
             if path.is_file():
                 add(path, (Path('mc-router') / path.relative_to(plugin)).as_posix())
         add(ROOT / 'LICENSE', 'mc-router/LICENSE')
-        add(ROOT / 'docs' / 'prototype.md', 'mc-router/README.md')
 
 
 if __name__ == '__main__':

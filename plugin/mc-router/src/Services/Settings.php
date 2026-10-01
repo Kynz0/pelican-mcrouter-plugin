@@ -20,6 +20,7 @@ final class Settings
             'pools' => config('mc-router.pools', []), 'eggs' => [], 'local_port' => 25564,
             'ssh_host' => '', 'ssh_port' => 22, 'ssh_user' => '', 'ssh_api_port' => 25564,
             'ssh_key_path' => '', 'ssh_known_hosts_path' => '',
+            'http_host' => '', 'http_port' => 25564, 'http_tls' => false,
         ];
         $saved = Schema::hasTable('mc_router_settings') ? DB::table('mc_router_settings')->where('id', 1)->value('values') : null;
         $settings = array_replace($defaults, $saved ? json_decode($saved, true, 512, JSON_THROW_ON_ERROR) : []);
@@ -36,10 +37,11 @@ final class Settings
         $values = array_intersect_key($data, $this->get());
         $values = array_replace($this->get(), $values);
         Hostname::make('validation', $values['suffix']);
-        if (!in_array($values['mode'], ['dry-run', 'local', 'ssh'], true)
+        if (!in_array($values['mode'], ['dry-run', 'local', 'ssh', 'http'], true)
             || (config('mc-router.preview_only') && $values['mode'] !== 'dry-run')
-            || ($values['mode'] === 'local' && !app()->environment('local', 'testing'))) {
-            throw ValidationException::withMessages(['mode' => 'This transport is not permitted. Local HTTP is for disposable local testing only.']);
+            || ($values['mode'] === 'local' && !app()->environment('local', 'testing'))
+            || ($values['mode'] === 'http' && !config('mc-router.allow_insecure_http'))) {
+            throw ValidationException::withMessages(['mode' => 'This transport is not permitted. Local HTTP is for disposable local testing only; plain HTTP requires explicit env opt-in.']);
         }
         $eggs = array_values(array_unique(array_map('intval', $values['eggs'] ?? [])));
         if ($eggs && \App\Models\Egg::whereIn('id', $eggs)->count() !== count($eggs)) {
@@ -54,6 +56,19 @@ final class Settings
                 try { \Kynzo\McRouter\Domain\AllocationSelector::backend($allocation->toArray()); }
                 catch (\InvalidArgumentException $e) { throw ValidationException::withMessages(['pool_rows' => $e->getMessage()]); }
             }
+        }
+        if ($values['mode'] === 'http') {
+            $host = trim((string) $values['http_host']);
+            if ($host === '' || preg_match('/[\x00-\x1f\x7f\s]/', $host) || strlen($host) > 253
+                || (!filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) && !preg_match('/^\[[0-9A-Fa-f:]{2,45}\]$/', $host))) {
+                throw ValidationException::withMessages(['http_host' => 'Enter the router host name or IP, without a scheme, port or path.']);
+            }
+            $values['http_host'] = $host;
+            if (!filter_var($values['http_port'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]])) {
+                throw ValidationException::withMessages(['http_port' => 'Enter a valid TCP port.']);
+            }
+            $values['http_port'] = (int) $values['http_port'];
+            $values['http_tls'] = (bool) $values['http_tls'];
         }
         foreach (['local_port', 'ssh_port', 'ssh_api_port'] as $key) {
             if (!filter_var($values[$key], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]])) {
@@ -79,7 +94,7 @@ final class Settings
     public function assertConnectionChange(array $values): void
     {
         $previous = $this->get();
-        $keys = array_flip(['mode', 'suffix', 'local_port', 'ssh_host', 'ssh_port', 'ssh_user', 'ssh_api_port', 'ssh_key_path', 'ssh_known_hosts_path']);
+        $keys = array_flip(['mode', 'suffix', 'local_port', 'ssh_host', 'ssh_port', 'ssh_user', 'ssh_api_port', 'ssh_key_path', 'ssh_known_hosts_path', 'http_host', 'http_port', 'http_tls']);
         if (array_intersect_key($previous, $keys) !== array_intersect_key($values, $keys)
             && RouteRecord::get()->contains(fn ($r) => count($r->applied) > 0 || count($r->attempted ?? []) > 0)) {
             throw ValidationException::withMessages(['mode' => 'Disable and remove managed routes before changing the router connection or hostname suffix.']);

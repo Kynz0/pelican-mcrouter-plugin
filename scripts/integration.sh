@@ -8,4 +8,5 @@ php tests/panel.php
 php tests/creation.php
 python3 tests/router_api.py
 python3 tests/sync_driver.py
+python3 tests/http_driver.py
 python3 tests/ssh_driver.py

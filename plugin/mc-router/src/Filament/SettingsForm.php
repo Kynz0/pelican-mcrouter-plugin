@@ -61,10 +61,12 @@ final class SettingsForm
                     }),
             ]),
             Text::make('DNS wildcard and TCP forwarding are configured outside this plugin. Route Active means accepted by mc-router, not that Minecraft is online or disk persistence is guaranteed.'),
+            Text::make('Transport setup guides (same-host, SSH tunnel, plain HTTP) are documented step by step in the plugin README bundled with the download.'),
             Select::make('mode')->label('Router transport')->live()->required()
                 ->options(config('mc-router.preview_only') ? ['dry-run' => 'Dry-run (no server or router changes)'] : [
                     'dry-run' => 'Dry-run (no server or router changes)',
                     'ssh' => 'Restricted SSH forwarding to mc-router loopback API',
+                    'http' => 'Plain HTTP API URL (no authentication)',
                     'local' => 'Disposable local test router (loopback HTTP)',
                 ]),
             TextInput::make('suffix')->label('Hostname suffix')->placeholder('mc.example.org')->required()
@@ -86,7 +88,16 @@ final class SettingsForm
                 ->helperText('Saving automatically adds or removes the "' . \Kynzo\McRouter\Filament\RoutingFields::EGG_FEATURE . '" egg feature to match this list — eggs with that feature get the creation step and the edit tab (you can also set the feature manually in the egg editor). With no eggs in the list, MC Router is not offered anywhere.'),
             TextInput::make('local_port')->label('Local test API port')->numeric()->minValue(1)->maxValue(65535)
                 ->visible(fn (Get $get) => $get('mode') === 'local'),
-            TextInput::make('ssh_host')->label('SSH host')->visible(fn (Get $get) => $get('mode') === 'ssh'),
+            TextInput::make('http_host')->label('mc-router host (no scheme, no path)')
+                ->visible(fn (Get $get) => $get('mode') === 'http')
+                ->placeholder('router.example.org'),
+            TextInput::make('http_port')->label('API port')->numeric()->minValue(1)->maxValue(65535)
+                ->visible(fn (Get $get) => $get('mode') === 'http'),
+            \Filament\Forms\Components\Toggle::make('http_tls')->label('Use HTTPS (any certificate accepted)')
+                ->visible(fn (Get $get) => $get('mode') === 'http')
+                ->helperText('Accepts self-signed certificates. The mc-router API has no authentication: anyone who can reach this port can rewrite every route. Restrict reachability with a firewall or VPN.'),
+            TextInput::make('ssh_host')->label('SSH host')->visible(fn (Get $get) => $get('mode') === 'ssh')
+                ->hint('Run `php artisan mc-router:ssh-setup` on the Panel host for a generated step-by-step guide.'),
             TextInput::make('ssh_port')->label('SSH port')->numeric()->visible(fn (Get $get) => $get('mode') === 'ssh'),
             TextInput::make('ssh_user')->label('Dedicated SSH account')->visible(fn (Get $get) => $get('mode') === 'ssh'),
             TextInput::make('ssh_api_port')->label('mc-router loopback API port')->numeric()->visible(fn (Get $get) => $get('mode') === 'ssh'),

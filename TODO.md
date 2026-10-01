@@ -33,12 +33,15 @@
 - [x] Real Panel/Livewire, mocked-Wings lifecycle, actual router, restricted sshd and archive-import tests.
 - [x] Actual public browser smoke test; independent test account removed afterward.
 - [x] Updated installation, trust, persistence and rollback documentation.
+- [x] Ship three router transports with one plugin (user-approved 2026-10-01): same-host HTTP, restricted SSH forwarding, and opt-in plain HTTP behind `MC_ROUTER_ALLOW_INSECURE_HTTP` (rejected by default).
+- [x] Shipped `php artisan mc-router:ssh-setup [--generate]` guide/generator plus bundled plugin README covering all transports; settings UI references both.
+- [x] Confirmed queue worker + scheduler are standard Panel prerequisites (official install guide); plugin rides on them and degrades gracefully (retry + reconciliation) when they are misconfigured.
+- [x] Browser smoke still pending re-run for 0.3.0-dev settings changes (forced dry-run preview).
 
 ## Before production / stable v1
 
 - [ ] Add remaining Tabler icons for closer panel look & feel (creation step badge, some action buttons, settings fields, notification icons).
-- [ ] Offer upstream PR for true mid-wizard step insertion (between Egg Configuration and Environment Configuration).
-- [ ] Review whether trusted Panel-wide API access via SSH is acceptable (no native namespace authorization).
+- [x] Review whether trusted Panel-wide API access via SSH is acceptable (no native namespace authorization) — accepted 2026-10-01 as documented trade-off; plain HTTP alternative is opt-in with the same trust note.
 - [ ] Task-scoped authorization for a live install and any SSH/systemd/permission/DNS/NAT changes.
 - [ ] Validate live router restart durability, writable config/sandbox, backups and restore procedure.
 - [ ] Verify queue workers/scheduler and contention/races under the target live deployment.
@@ -47,5 +50,6 @@
 - [ ] Disposable actual Wings/game creation, failure cleanup, port rebind behavior and external Java join.
 - [ ] Production update/uninstall validation with matched snapshots and worker restarts.
 - [ ] Decide scoped delegated-admin permissions (alpha is root-admin-only).
-- [ ] Optional upstream hook for cleaner first-step placement/filtering of the native primary field.
+- [x] No upstream PR for mid-wizard step placement (user declined; current placement is preferred).
+- [ ] First live route on the HDD node: disposable server, external probes, human join gate (user-approved plan; awaits live install).
 - [ ] No adoption of manual routes, multi-router support, Bedrock or voice-port automation yet.

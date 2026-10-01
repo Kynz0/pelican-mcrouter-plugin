@@ -4,6 +4,7 @@
 namespace Kynzo\McRouter\Services;
 
 use Illuminate\Support\Facades\Http;
+use Kynzo\McRouter\Transport\HttpRequest;
 use Kynzo\McRouter\Transport\HttpResponse;
 use Kynzo\McRouter\Exceptions\RouterException as RuntimeException;
 use Symfony\Component\Process\Process;
@@ -34,9 +35,30 @@ final class RouterClient
         $this->request('DELETE', '/routes/' . rawurlencode($hostname), null, true);
     }
 
+    /** @return array{0:string, 1:string} [host header value, base URL] */
+    private function httpTarget(array $settings): array
+    {
+        $port = (int) $settings['http_port'];
+        if ($port === 80) {
+            return [$settings['http_host'], 'http://' . $settings['http_host']];
+        }
+        return [$settings['http_host'] . ':' . $port, 'http://' . $settings['http_host'] . ':' . $port];
+    }
+
+    /** @return array{0:string, 1:string} [host header value, base URL] */
+    private function sshTarget(array $settings): array
+    {
+        $host = (string) $settings['ssh_host'];
+        if ((int) $settings['ssh_port'] === 80) {
+            return [$host, 'http://' . $host];
+        }
+        return [$host . ':' . (int) $settings['ssh_port'], 'http://' . $host . ':' . (int) $settings['ssh_port']];
+    }
+
     private function request(string $method, string $path, ?array $data = null, bool $allowMissing = false): array
     {
         $settings = app(Settings::class)->get();
+        $request = new HttpRequest($method, $path, $data);
         if ($settings['mode'] === 'local' && app()->environment('local', 'testing')) {
             try {
                 $response = Http::acceptJson()->connectTimeout(3)->timeout(8)->withoutRedirecting()
@@ -44,12 +66,21 @@ final class RouterClient
                 $status = $response->status();
                 $body = $response->body();
             } catch (\Throwable) { throw new RuntimeException('Could not reach the local test router.'); }
+        } elseif ($settings['mode'] === 'http') {
+            [$host, $base] = $this->httpTarget($settings);
+            try {
+                $response = Http::acceptJson()->connectTimeout(3)->timeout(8)->withoutRedirecting()->withoutVerifying()
+                    ->send($method, $base . $path, $data === null ? [] : ['json' => $data]);
+                $status = $response->status();
+                $body = $response->body();
+            } catch (\Throwable) { throw new RuntimeException('Could not reach the mc-router API. Check the host, port and -api-binding.'); }
         } elseif ($settings['mode'] === 'ssh') {
             if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9.:-]*$/D', $settings['ssh_host']) || !preg_match('/^[a-z_][a-z0-9_-]*$/D', $settings['ssh_user'])) {
                 throw new RuntimeException('Invalid SSH configuration.');
             }
-            $body = $data === null ? '' : json_encode($data, JSON_THROW_ON_ERROR);
-            $request = "$method $path HTTP/1.1\r\nHost: 127.0.0.1\r\nAccept: application/json\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: " . strlen($body) . "\r\n\r\n$body";
+            [$head, $body] = $request->packet();
+            [$host] = $this->sshTarget($settings);
+            $request = str_replace('{HOST}', $host, $head) . "\r\n" . $body;
             // -W requests only direct-tcpip forwarding: no remote shell, command or file writes.
             $process = new Process([
                 'ssh', '-F', '/dev/null', '-T', '-W', '127.0.0.1:' . (int) $settings['ssh_api_port'],

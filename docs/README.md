@@ -9,5 +9,6 @@ Current implementation: [alpha instructions](prototype.md), [milestone 2 finding
 - [Verification plan](verification.md): tests and acceptance criteria, including a disposable server and external status check.
 - [Agent handoff](agent-handoff.md): historical plan; superseded by [handoff-live.md](handoff-live.md).
 - [Live handoff](handoff-live.md): **start here for the next session** — current state, plugin map, live-deployment checklist, and session gotchas.
+- End-user documentation shipped with the plugin: [plugin/mc-router/README.md](../plugin/mc-router/README.md) (transports A/B/C, requirements, troubleshooting).
 
 **Status:** 0.2.0-dev alpha with integrated admin wizard/tab, plugin settings, durable route synchronization and disposable compatibility/lifecycle/router/SSH/browser tests. The public preview is forced dry-run. No production changes. Original topology remains unverified live; milestone 2 records current implementation evidence and remaining gates.

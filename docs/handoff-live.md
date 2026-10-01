@@ -6,14 +6,25 @@ verified), [prototype.md](prototype.md) (user-facing install/usage), and
 operational bridge to the next session: everything known that matters for a
 live integration, in one place.
 
-## Current state (branch `feat/pelican-mc-router-plugin`)
+## Current state (branch `feat/live-transports`)
 
-- Version `0.2.0-dev`, AGPL-3.0-or-later, admin-only, Panel `v1.0.0-beta38`,
+- Version `0.3.0-dev`, AGPL-3.0-or-later, admin-only, Panel `v1.0.0-beta38`,
   mc-router `v1.47.1` (both pinned in the harness). All work is committed.
 - Fully working locally: admin UI (wizard step + edit tab + settings), egg
   feature gating, dry-run mode, route lifecycle against a **real disposable
   mc-router** (local HTTP and restricted SSH transports), ZIP import, browser
   smoke test.
+- **User-approved transport design (2026-10-01):** ship three live transports
+  in one plugin — (A) same-host plain HTTP, (B) restricted SSH `-W` forwarding
+  to the loopback API, (C) opt-in plain HTTP to a remote API URL behind
+  `MC_ROUTER_ALLOW_INSECURE_HTTP=true` (validation fails closed without the
+  env flag). A shipped `php artisan mc-router:ssh-setup [--generate]`
+  command prints/generated-walks through the router-side SSH account setup;
+  the bundled `plugin/mc-router/README.md` documents all transports for
+  end users and the settings UI references it. Upstream PR for mid-wizard
+  step placement was declined by the user.
+- The user approves each live step when reached; CT changes are done by the
+  user (or by the agent after explicit task-scoped approval).
 - **Nothing is installed on the user's live Panel/router.** The live panel is
   `/var/www/pelican` (never touch without explicit task-scoped approval), the
   live router CT is `192.168.1.204`.
@@ -49,7 +60,8 @@ live integration, in one place.
 | `src/Services/RoutedCreationService.php` | Decorator around core `ServerCreationService`; strips `mc_router_*` from data, egg-feature gate, capture context, marks provisioned, queues sync. |
 | `src/Services/CreationCapture.php` | Model `creating`/`created` hooks inside Pelican's own creation transaction; validates/locks primary, reserves hostname, creates record. |
 | `src/Services/Synchronizer.php` | The heart: apply/remove/rename/readback, ownership conflicts, uncertain `attempted` map, drift healing, deletion cleanup, `ip_alias` display alias. |
-| `src/Services/RouterClient.php` | Local HTTP (local/testing only) or `ssh -W` transport; strict ssh options; bounded responses. |
+| `src/Services/RouterClient.php` | Local HTTP (local/testing only), plain HTTP (`http` mode, opt-in via `MC_ROUTER_ALLOW_INSECURE_HTTP`, scheme `http`/`https` with self-signed-tolerant TLS) or `ssh -W` transport; strict ssh options; bounded responses. Shared `Transport/HttpRequest.php` request builder for the raw transports. |
+| `src/Console/Commands/SshSetup.php` | `mc-router:ssh-setup` guide/generator for the restricted SSH transport. |
 | `src/Transport/HttpResponse.php` | Minimal HTTP parser for the SSH-forwarded raw response (chunked, content-length, size caps). |
 | `src/Models/RouteRecord.php`, `BackendQuarantine.php` | Ledger (`mc_router_routes`, `mc_router_hostnames`) and the global Allocation scope hiding claimed backends. |
 | `src/Jobs/SyncRoute.php`, `src/Console/Commands/Reconcile.php` | Queued sync (tries 3, backoff) + `mc-router:reconcile` (scheduled every minute). |
@@ -74,13 +86,19 @@ live integration, in one place.
 
 ## Live-deployment checklist for the next session (in order)
 
+0. **Pick the transport first.** For this deployment (Panel CT + router CT
+   are different machines) transport B (restricted SSH) is the default.
+   Transport A (same-host) does not apply; transport C would expose an
+   unauthenticated API port and is explicitly opt-in (`MC_ROUTER_ALLOW_INSECURE_HTTP`).
 1. **mc-router CT access (needs user approval, uses `mc-router-ops` skill):**
-   create a dedicated unprivileged SSH account (e.g. `mcrouter-api`) with a
-   dedicated key; sshd config `PermitOpen 127.0.0.1:<api-port>`,
-   `AllowTcpForwarding local`, `PermitTTY no`, `ForceCommand /bin/false` —
-   mirror `tests/ssh_driver.py` which already proves this exact setup works.
-   Generate/pin `known_hosts` on the Panel host; store the private key on the
-   Panel host (path only in settings).
+   run `php artisan mc-router:ssh-setup` on the Panel host (or follow README
+   Transport B) to create the dedicated unprivileged SSH account
+   (e.g. `mcrouter-api`) with a dedicated key; sshd config
+   `PermitOpen 127.0.0.1:<api-port>`, `AllowTcpForwarding local`,
+   `PermitTTY no`, `ForceCommand /bin/false` — mirror `tests/ssh_driver.py`
+   which already proves this exact setup works. Generate/pin `known_hosts`
+   on the Panel host; store the private key on the Panel host (path only in
+   settings).
 2. **Verify API persistence on the live router:** the recorded routes file is
    root-owned while the service runs unprivileged; `SaveRoutes` (triggered by
    API writes) may fail silently (POST still returns 201 — proven in
@@ -141,6 +159,10 @@ live integration, in one place.
   service or the served app may serve stale classes while CLI tests look fresh.
 - The dev server reads `.dev/public-url` per request for asset/signed-link
   origins (quick-tunnel URL changes between sessions).
+- **The `http` mode requires `MC_ROUTER_ALLOW_INSECURE_HTTP=true`; tests set
+  `config(['mc-router.allow_insecure_http' => true])` instead.**
+- Editing plugin files needs `cp -R plugin/mc-router/src/. .dev/panel/plugins/mc-router/src/`
+  (plus `config/` when it changes) — CLI tests import fresh classes otherwise.
 - **Livewire testing assertions that fail outside phpunit** crash with a
   cryptic `Registry.php assert(Configuration)` (the failure *reporter* is
   broken, not the assertion). Use the trace-catch trick or check state
@@ -158,8 +180,10 @@ live integration, in one place.
 nix run .#test                                 # syntax, docs, domain, transport, archive checks
 nix develop -c php tests/panel.php             # native UI + settings + gating (needs setup-panel.sh)
 nix develop -c php tests/creation.php          # creation lifecycle, mocked Wings
+nix develop -c php tests/http_transport.php     # opt-in plain HTTP transport (driver below)
 nix develop -c python3 tests/router_api.py     # raw API facts
 nix develop -c python3 tests/sync_driver.py    # 52-check real-router lifecycle
+nix develop -c python3 tests/http_driver.py    # plain-HTTP transport against real router
 nix develop -c python3 tests/ssh_driver.py     # real sshd, restricted -W transport
 nix develop -c bash scripts/integration.sh     # package + import + above
 nix develop .#browser -c bash scripts/browser-smoke.sh   # Chromium smoke (public preview)
